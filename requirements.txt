@@ -1,4 +1,3 @@
-Plaintext
 Flask
 requests
 pymongo
