@@ -3,4 +3,4 @@ requests
 pymongo
 APScheduler
 flask-cors
-
+python-dotenv
