@@ -1,9 +1,11 @@
 from flask import Flask, jsonify
+from flask_cors import CORS
 import os
 import requests
 from pymongo import MongoClient
 
 app = Flask(__name__)
+CORS(app)
 
 # 1. 환경 변수 불러오기 (네이버 키 및 MongoDB 주소)
 NAVER_CLIENT_ID = os.environ.get('NAVER_CLIENT_ID')
