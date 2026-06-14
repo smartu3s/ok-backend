@@ -47,6 +47,10 @@ def get_news():
             if articles:
                 news_collection.insert_many(articles)
                 
+                # 에러 해결: MongoDB가 만든 고유 ID(_id)를 일반 문자로 변환
+                for article in articles:
+                    article['_id'] = str(article['_id'])
+                
             return jsonify({
                 "message": "뉴스 수집 및 데이터베이스 저장 성공!", 
                 "saved_count": len(articles),
