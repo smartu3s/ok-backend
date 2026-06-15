@@ -6,14 +6,18 @@ from pymongo import MongoClient
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
 import pytz
-from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 CORS(app)
 
+# 환경 변수 설정
 NAVER_CLIENT_ID = os.environ.get('NAVER_CLIENT_ID')
 NAVER_CLIENT_SECRET = os.environ.get('NAVER_CLIENT_SECRET')
 MONGO_URI = os.environ.get('MONGO_URI')
+
+# 한국투자증권 API 키
+KIS_APP_KEY = os.environ.get('KIS_APP_KEY')
+KIS_APP_SECRET = os.environ.get('KIS_APP_SECRET')
 
 try:
     client = MongoClient(MONGO_URI)
@@ -23,18 +27,46 @@ try:
 except Exception as e:
     print("MongoDB 연결 에러:", e)
 
-def get_tiger_price():
-    """네이버 금융에서 TIGER 미국배당다우존스 실시간 종가 크롤링"""
+def get_kis_access_token():
+    """한국투자증권 API 접근 토큰 발급"""
     try:
-        url = "https://finance.naver.com/item/main.naver?code=458730"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(url, headers=headers)
-        soup = BeautifulSoup(res.text, 'html.parser')
-        price_tag = soup.select_one('.no_today .no_up .blind')
-        if price_tag:
-            return int(price_tag.text.replace(',', ''))
+        url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP"
+        headers = {"content-type": "application/json"}
+        body = {
+            "grant_type": "client_credentials",
+            "appkey": KIS_APP_KEY,
+            "appsecret": KIS_APP_SECRET
+        }
+        res = requests.post(url, headers=headers, json=body)
+        if res.status_code == 200:
+            return res.json().get("access_token")
     except Exception as e:
-        print("네이버 시세 수집 에러:", e)
+        print("한투 토큰 발급 에러:", e)
+    return None
+
+def get_tiger_price_kis(token):
+    """한국투자증권 API를 이용한 TIGER 미국배당다우존스(458730) 시세 조회"""
+    try:
+        url = "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-price"
+        headers = {
+            "Content-Type": "application/json; charset=utf-8",
+            "authorization": f"Bearer {token}",
+            "appkey": KIS_APP_KEY,
+            "appsecret": KIS_APP_SECRET,
+            "tr_id": "FHKST01010100" # 주식현재가 조회 TR ID
+        }
+        params = {
+            "fid_cond_mrkt_div_code": "J", # J: 주식/ETF
+            "fid_input_iscd": "458730"     # 종목코드
+        }
+        res = requests.get(url, headers=headers, params=params)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get("rt_cd") == "0":
+                price_str = data["output"]["stck_prpr"] # 현재가
+                return int(price_str)
+    except Exception as e:
+        print("한투 시세 조회 에러:", e)
     return 0
 
 def collect_daily_data():
@@ -49,8 +81,16 @@ def collect_daily_data():
         if articles:
             news_collection.insert_many(articles)
             
-        # 2. ETF 시세 수집 (크롤링 방식)
-        etf_price = get_tiger_price()
+        # 2. 한국투자증권 API 연동 ETF 시세 수집
+        etf_price = 0
+        if KIS_APP_KEY and KIS_APP_SECRET:
+            token = get_kis_access_token()
+            if token:
+                etf_price = get_tiger_price_kis(token)
+            else:
+                print("한투 API 토큰 발급 실패")
+        else:
+            print("한투 API 키가 설정되지 않았습니다.")
         
         # 3. 누적 기록 저장
         seoul_time = datetime.now(pytz.timezone('Asia/Seoul'))
@@ -60,7 +100,7 @@ def collect_daily_data():
             "etf_price": etf_price,
             "post_office_rate": 4.2, 
             "kdb_rate": 3.5,         
-            "status": "자동 수집 성공"
+            "status": "자동 수집 성공 (한투API)"
         }
         history_collection.insert_one(history_record)
         print("자동 수집 및 기록 저장 완료:", history_record)
@@ -74,7 +114,7 @@ scheduler.start()
 
 @app.route('/')
 def home():
-    return "OK Backend Server is Running with Naver Crawler!"
+    return "OK Backend Server is Running with KIS API!"
 
 @app.route('/api/news')
 def get_news():
@@ -92,7 +132,7 @@ def get_history():
 @app.route('/api/force_collect')
 def force_collect():
     collect_daily_data()
-    return jsonify({"message": "수동 수집 성공! 새로고침 하세요."})
+    return jsonify({"message": "한국투자증권 API 수동 수집 성공! 새로고침 하세요."})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
