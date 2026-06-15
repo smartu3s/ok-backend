@@ -12,7 +12,7 @@ import re
 app = Flask(__name__)
 CORS(app)
 
-# 기존 환경 변수
+# 환경 변수
 NAVER_CLIENT_ID = os.environ.get('NAVER_CLIENT_ID')
 NAVER_CLIENT_SECRET = os.environ.get('NAVER_CLIENT_SECRET')
 MONGO_URI = os.environ.get('MONGO_URI')
@@ -135,15 +135,16 @@ def analyze_with_gemini(articles, etf_price, post_rate, kdb_rate):
         1. 현재 시장 흐름 요약 (3문장 이내)
         2. 안전 자산(예금)과 투자 자산(배당 ETF) 비율 조절에 대한 직관적인 제안
         """
+        
+        # 모델명을 gemini-2.0-flash 로 수정
         response = ai_client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-2.0-flash',
             contents=prompt
         )
         return response.text
     except Exception as e:
         error_details = str(e)
         print("Gemini API 호출 에러:", error_details, flush=True)
-        # 에러 발생 시 그 원인을 화면에 띄워주도록 수정
         return f"🚨 AI 분석 중 오류가 발생했습니다.\n\n[상세 원인]: {error_details}\n\n이 영문 에러 메시지를 복사해서 알려주시면 즉시 해결해 드리겠습니다."
 
 def collect_daily_data():
