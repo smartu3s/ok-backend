@@ -6,6 +6,7 @@ from pymongo import MongoClient
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
 import pytz
+import yfinance as yf
 
 app = Flask(__name__)
 CORS(app)
@@ -22,7 +23,6 @@ try:
 except Exception as e:
     print("MongoDB 연결 에러:", e)
 
-# ★ 자동 수집을 수행하는 함수 (매일 정해진 시간에 실행됨)
 def collect_daily_data():
     try:
         # 1. 네이버 뉴스 수집
@@ -38,12 +38,25 @@ def collect_daily_data():
         articles = data.get("items", [])
         if articles:
             news_collection.insert_many(articles)
+            
+        # 2. ETF 시세 수집 (1일 -> 5일치 데이터 확보 후 최신값 추출로 변경)
+        etf_price = 0
+        try:
+            ticker = yf.Ticker("458730.KS")
+            todays_data = ticker.history(period="5d") 
+            if not todays_data.empty:
+                etf_price = int(todays_data['Close'].iloc[-1]) # 가장 최신 종가
+        except Exception as e:
+            print("ETF 시세 수집 에러:", str(e))
         
-        # 2. 누적 기록(History) 데이터베이스에 오늘의 수집 결과 저장
+        # 3. 누적 기록 저장
         seoul_time = datetime.now(pytz.timezone('Asia/Seoul'))
         history_record = {
             "collected_at": seoul_time.strftime("%Y-%m-%d %H:%M:%S"),
             "news_count": len(articles),
+            "etf_price": etf_price,
+            "post_office_rate": 4.2, 
+            "kdb_rate": 3.5,         
             "status": "자동 수집 성공"
         }
         history_collection.insert_one(history_record)
@@ -52,18 +65,16 @@ def collect_daily_data():
     except Exception as e:
         print("자동 수집 에러:", str(e))
 
-# ★ 스케줄러(타이머) 설정: 한국 시간 기준 매일 15시 30분에 작동
 scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Seoul'))
 scheduler.add_job(func=collect_daily_data, trigger="cron", hour=15, minute=30)
 scheduler.start()
 
 @app.route('/')
 def home():
-    return "OK Backend Server is Running with Scheduler!"
+    return "OK Backend Server is Running with 5d ETF Data!"
 
 @app.route('/api/news')
 def get_news():
-    # 수동 뉴스 조회 유지
     articles = list(news_collection.find({}, {'_id': 0}).sort('_id', -1).limit(5))
     return jsonify({"message": "DB에서 뉴스 불러오기 성공", "data": articles})
 
@@ -75,11 +86,10 @@ def get_history():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
-# ★ 당장 테스트해볼 수 있는 '강제 수집' 스위치 추가
 @app.route('/api/force_collect')
 def force_collect():
     collect_daily_data()
-    return jsonify({"message": "수동으로 자동 수집 함수를 실행했습니다! 화면을 새로고침 해보세요."})
+    return jsonify({"message": "수동으로 자동 수집(뉴스+ETF) 함수를 실행했습니다! 화면을 새로고침 해보세요."})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
