@@ -6,7 +6,7 @@ from pymongo import MongoClient
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
 import pytz
-import google.generativeai as genai
+from google import genai
 import re
 
 app = Flask(__name__)
@@ -19,17 +19,15 @@ MONGO_URI = os.environ.get('MONGO_URI')
 KIS_APP_KEY = os.environ.get('KIS_APP_KEY')
 KIS_APP_SECRET = os.environ.get('KIS_APP_SECRET')
 FSS_API_KEY = os.environ.get('FSS_API_KEY')
-
-# Gemini API 키 추가
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
 try:
-    client = MongoClient(MONGO_URI)
-    db = client['smartu3s_mong']
+    client_mongo = MongoClient(MONGO_URI)
+    db = client_mongo['smartu3s_mong']
     news_collection = db['news']
     history_collection = db['history']
 except Exception as e:
-    print("MongoDB 연결 에러:", e)
+    print("MongoDB 연결 에러:", e, flush=True)
 
 cached_kis_token = None
 token_issued_at = None
@@ -54,7 +52,7 @@ def get_valid_kis_token():
             token_issued_at = now
             return cached_kis_token
     except Exception as e:
-        print("한투 토큰 발급 에러:", e)
+        print("한투 토큰 발급 에러:", e, flush=True)
     return None
 
 def get_tiger_price_kis(token):
@@ -77,7 +75,7 @@ def get_tiger_price_kis(token):
             if data.get("rt_cd") == "0":
                 return int(data["output"]["stck_prpr"])
     except Exception as e:
-        print("한투 시세 조회 에러:", e)
+        print("한투 시세 조회 에러:", e, flush=True)
     return 0
 
 def get_fss_rates():
@@ -104,25 +102,21 @@ def get_fss_rates():
                 if rates:
                     kdb_rate = float(max(rates))
     except Exception as e:
-        print("금감원 금리 조회 에러:", str(e))
+        print("금감원 금리 조회 에러:", str(e), flush=True)
     return post_office_rate, kdb_rate
 
 def clean_html(raw_html):
-    """뉴스 제목의 HTML 태그 제거"""
     cleanr = re.compile('<.*?>')
     cleantext = re.sub(cleanr, '', raw_html)
     return cleantext.replace('&quot;', '"').replace('&apos;', "'").replace('&amp;', '&')
 
 def analyze_with_gemini(articles, etf_price, post_rate, kdb_rate):
-    """수집된 데이터를 바탕으로 Gemini API에 분석 요청"""
     if not GEMINI_API_KEY:
         return "Gemini API 키가 설정되지 않아 분석을 건너뜁니다."
     
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        ai_client = genai.Client(api_key=GEMINI_API_KEY)
         
-        # 뉴스 제목 추출 및 정제
         news_titles = "\n".join([f"- {clean_html(a.get('title', ''))}" for a in articles])
         
         prompt = f"""
@@ -141,15 +135,17 @@ def analyze_with_gemini(articles, etf_price, post_rate, kdb_rate):
         1. 현재 시장 흐름 요약 (3문장 이내)
         2. 안전 자산(예금)과 투자 자산(배당 ETF) 비율 조절에 대한 직관적인 제안
         """
-        response = model.generate_content(prompt)
+        response = ai_client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt
+        )
         return response.text
     except Exception as e:
-        print("Gemini API 호출 에러:", str(e))
+        print("Gemini API 호출 에러:", str(e), flush=True)
         return "AI 분석 중 오류가 발생했습니다."
 
 def collect_daily_data():
     try:
-        # 1. 네이버 뉴스 수집
         url = "https://openapi.naver.com/v1/search/news.json"
         headers = {"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}
         params = {"query": "경제 IT AI", "display": 5, "sort": "date"}
@@ -158,7 +154,6 @@ def collect_daily_data():
         if articles:
             news_collection.insert_many(articles)
             
-        # 2. 시세 및 금리 수집
         etf_price = 0
         if KIS_APP_KEY and KIS_APP_SECRET:
             token = get_valid_kis_token()
@@ -166,11 +161,8 @@ def collect_daily_data():
                 etf_price = get_tiger_price_kis(token)
         
         post_rate, kdb_rate = get_fss_rates()
-        
-        # 3. Gemini AI 분석 요청
         ai_summary = analyze_with_gemini(articles, etf_price, post_rate, kdb_rate)
         
-        # 4. 누적 기록 및 AI 요약 저장
         seoul_time = datetime.now(pytz.timezone('Asia/Seoul'))
         history_record = {
             "collected_at": seoul_time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -178,14 +170,14 @@ def collect_daily_data():
             "etf_price": etf_price,
             "post_office_rate": post_rate, 
             "kdb_rate": kdb_rate,         
-            "ai_analysis": ai_summary, # AI 분석 결과 추가
+            "ai_analysis": ai_summary,
             "status": "AI 분석 완료"
         }
         history_collection.insert_one(history_record)
-        print("수집 및 분석 완료")
+        print("수집 및 분석 완료", flush=True)
         
     except Exception as e:
-        print("자동 수집 에러:", str(e))
+        print("자동 수집 에러:", str(e), flush=True)
 
 scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Seoul'))
 scheduler.add_job(func=collect_daily_data, trigger="cron", hour=15, minute=30)
