@@ -6,20 +6,22 @@ from pymongo import MongoClient
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
 import pytz
+import google.generativeai as genai
+import re
 
 app = Flask(__name__)
 CORS(app)
 
-# 환경 변수 설정
+# 기존 환경 변수
 NAVER_CLIENT_ID = os.environ.get('NAVER_CLIENT_ID')
 NAVER_CLIENT_SECRET = os.environ.get('NAVER_CLIENT_SECRET')
 MONGO_URI = os.environ.get('MONGO_URI')
-
 KIS_APP_KEY = os.environ.get('KIS_APP_KEY')
 KIS_APP_SECRET = os.environ.get('KIS_APP_SECRET')
-
-# 금감원 API 키 추가
 FSS_API_KEY = os.environ.get('FSS_API_KEY')
+
+# Gemini API 키 추가
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
 try:
     client = MongoClient(MONGO_URI)
@@ -29,7 +31,6 @@ try:
 except Exception as e:
     print("MongoDB 연결 에러:", e)
 
-# 한투 토큰 캐싱
 cached_kis_token = None
 token_issued_at = None
 
@@ -80,32 +81,22 @@ def get_tiger_price_kis(token):
     return 0
 
 def get_fss_rates():
-    """금융감독원 API를 통해 예금 금리(12개월 기준) 자동 수집"""
-    kdb_rate = 3.5        # 금감원 서버 응답 실패 시 사용할 기본값
-    post_office_rate = 4.2 # 우체국은 조회 대상 밖이므로 기본값 유지
-
+    kdb_rate = 3.5
+    post_office_rate = 4.2
     if not FSS_API_KEY:
-        print("금감원 API 키가 없습니다. 기본 금리를 사용합니다.")
         return post_office_rate, kdb_rate
 
     try:
         url = "http://finlife.fss.or.kr/finlifeapi/depositProductsSearch.json"
-        params = {
-            "auth": FSS_API_KEY,
-            "topFinGrpNo": "020000", # 020000: 시중은행
-            "pageNo": 1
-        }
+        params = {"auth": FSS_API_KEY, "topFinGrpNo": "020000", "pageNo": 1}
         res = requests.get(url, params=params)
         if res.status_code == 200:
             data = res.json()
             base_list = data.get("result", {}).get("baseList", [])
             option_list = data.get("result", {}).get("optionList", [])
             
-            # 산업은행의 상품 코드 찾기
             kdb_codes = [b["fin_prdt_cd"] for b in base_list if "산업은행" in b.get("kor_co_nm", "")]
-            
             if kdb_codes:
-                # 12개월(save_trm == "12") 만기 상품의 최고 기본 금리(intr_rate) 추출
                 rates = [
                     opt["intr_rate"] for opt in option_list 
                     if opt["fin_prdt_cd"] in kdb_codes and opt["save_trm"] == "12" and opt["intr_rate"] is not None
@@ -114,8 +105,47 @@ def get_fss_rates():
                     kdb_rate = float(max(rates))
     except Exception as e:
         print("금감원 금리 조회 에러:", str(e))
-        
     return post_office_rate, kdb_rate
+
+def clean_html(raw_html):
+    """뉴스 제목의 HTML 태그 제거"""
+    cleanr = re.compile('<.*?>')
+    cleantext = re.sub(cleanr, '', raw_html)
+    return cleantext.replace('&quot;', '"').replace('&apos;', "'").replace('&amp;', '&')
+
+def analyze_with_gemini(articles, etf_price, post_rate, kdb_rate):
+    """수집된 데이터를 바탕으로 Gemini API에 분석 요청"""
+    if not GEMINI_API_KEY:
+        return "Gemini API 키가 설정되지 않아 분석을 건너뜁니다."
+    
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # 뉴스 제목 추출 및 정제
+        news_titles = "\n".join([f"- {clean_html(a.get('title', ''))}" for a in articles])
+        
+        prompt = f"""
+        당신은 객관적이고 냉철한 금융 분석 AI입니다. 아래 제공된 오늘 수집된 데이터와 경제/IT 뉴스를 바탕으로,
+        '원금 방어'와 '안정적인 현금 흐름 창출'이라는 두 가지 핵심 원칙에 따라 분석해 주세요.
+
+        [오늘의 수집 데이터]
+        - TIGER 미국배당다우존스 시세: {etf_price}원
+        - 우체국 예금 금리: {post_rate}%
+        - 산업은행 예금 금리: {kdb_rate}%
+        
+        [오늘의 핵심 뉴스 제목]
+        {news_titles}
+
+        위 정보를 바탕으로 다음 두 가지 항목을 작성해 주세요. 문장은 간결하고 명확하게 작성합니다.
+        1. 현재 시장 흐름 요약 (3문장 이내)
+        2. 안전 자산(예금)과 투자 자산(배당 ETF) 비율 조절에 대한 직관적인 제안
+        """
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        print("Gemini API 호출 에러:", str(e))
+        return "AI 분석 중 오류가 발생했습니다."
 
 def collect_daily_data():
     try:
@@ -124,22 +154,23 @@ def collect_daily_data():
         headers = {"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}
         params = {"query": "경제 IT AI", "display": 5, "sort": "date"}
         response = requests.get(url, headers=headers, params=params)
-        data = response.json()
-        articles = data.get("items", [])
+        articles = response.json().get("items", [])
         if articles:
             news_collection.insert_many(articles)
             
-        # 2. 한국투자증권 API 연동 ETF 시세 수집
+        # 2. 시세 및 금리 수집
         etf_price = 0
         if KIS_APP_KEY and KIS_APP_SECRET:
             token = get_valid_kis_token()
             if token:
                 etf_price = get_tiger_price_kis(token)
         
-        # 3. 금감원 API 연동 금리 수집
         post_rate, kdb_rate = get_fss_rates()
         
-        # 4. 누적 기록 저장
+        # 3. Gemini AI 분석 요청
+        ai_summary = analyze_with_gemini(articles, etf_price, post_rate, kdb_rate)
+        
+        # 4. 누적 기록 및 AI 요약 저장
         seoul_time = datetime.now(pytz.timezone('Asia/Seoul'))
         history_record = {
             "collected_at": seoul_time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -147,10 +178,11 @@ def collect_daily_data():
             "etf_price": etf_price,
             "post_office_rate": post_rate, 
             "kdb_rate": kdb_rate,         
-            "status": "한투+금감원 자동 수집 성공"
+            "ai_analysis": ai_summary, # AI 분석 결과 추가
+            "status": "AI 분석 완료"
         }
         history_collection.insert_one(history_record)
-        print("수집 완료:", history_record)
+        print("수집 및 분석 완료")
         
     except Exception as e:
         print("자동 수집 에러:", str(e))
@@ -161,7 +193,7 @@ scheduler.start()
 
 @app.route('/')
 def home():
-    return "OK Backend Server with KIS & FSS API!"
+    return "OK Backend Server with Gemini AI!"
 
 @app.route('/api/news')
 def get_news():
@@ -179,7 +211,7 @@ def get_history():
 @app.route('/api/force_collect')
 def force_collect():
     collect_daily_data()
-    return jsonify({"message": "금융 데이터 전면 자동 수집 완료! 화면을 새로고침 하세요."})
+    return jsonify({"message": "Gemini AI 분석 및 데이터 수집 완료! 화면을 새로고침 하세요."})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
