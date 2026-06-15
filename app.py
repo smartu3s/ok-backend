@@ -6,7 +6,7 @@ from pymongo import MongoClient
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
 import pytz
-import yfinance as yf
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 CORS(app)
@@ -23,31 +23,34 @@ try:
 except Exception as e:
     print("MongoDB 연결 에러:", e)
 
+def get_tiger_price():
+    """네이버 금융에서 TIGER 미국배당다우존스 실시간 종가 크롤링"""
+    try:
+        url = "https://finance.naver.com/item/main.naver?code=458730"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        res = requests.get(url, headers=headers)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        price_tag = soup.select_one('.no_today .no_up .blind')
+        if price_tag:
+            return int(price_tag.text.replace(',', ''))
+    except Exception as e:
+        print("네이버 시세 수집 에러:", e)
+    return 0
+
 def collect_daily_data():
     try:
         # 1. 네이버 뉴스 수집
         url = "https://openapi.naver.com/v1/search/news.json"
-        headers = {
-            "X-Naver-Client-Id": NAVER_CLIENT_ID,
-            "X-Naver-Client-Secret": NAVER_CLIENT_SECRET
-        }
+        headers = {"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}
         params = {"query": "경제 IT AI", "display": 5, "sort": "date"}
         response = requests.get(url, headers=headers, params=params)
         data = response.json()
-        
         articles = data.get("items", [])
         if articles:
             news_collection.insert_many(articles)
             
-        # 2. ETF 시세 수집 (1일 -> 5일치 데이터 확보 후 최신값 추출로 변경)
-        etf_price = 0
-        try:
-            ticker = yf.Ticker("458730.KS")
-            todays_data = ticker.history(period="5d") 
-            if not todays_data.empty:
-                etf_price = int(todays_data['Close'].iloc[-1]) # 가장 최신 종가
-        except Exception as e:
-            print("ETF 시세 수집 에러:", str(e))
+        # 2. ETF 시세 수집 (크롤링 방식)
+        etf_price = get_tiger_price()
         
         # 3. 누적 기록 저장
         seoul_time = datetime.now(pytz.timezone('Asia/Seoul'))
@@ -71,7 +74,7 @@ scheduler.start()
 
 @app.route('/')
 def home():
-    return "OK Backend Server is Running with 5d ETF Data!"
+    return "OK Backend Server is Running with Naver Crawler!"
 
 @app.route('/api/news')
 def get_news():
@@ -89,7 +92,7 @@ def get_history():
 @app.route('/api/force_collect')
 def force_collect():
     collect_daily_data()
-    return jsonify({"message": "수동으로 자동 수집(뉴스+ETF) 함수를 실행했습니다! 화면을 새로고침 해보세요."})
+    return jsonify({"message": "수동 수집 성공! 새로고침 하세요."})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
