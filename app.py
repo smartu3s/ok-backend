@@ -16,7 +16,8 @@ MONGO_URI = os.environ.get('MONGO_URI')
 try:
     client = MongoClient(MONGO_URI)
     db = client['smartu3s_mong'] # 데이터베이스 선택
-    news_collection = db['news'] # 컬렉션(저장소) 생성 및 선택
+    news_collection = db['news'] # 뉴스 저장소
+    history_collection = db['history'] # 과거 기록 저장소 추가
 except Exception as e:
     print("MongoDB 연결 에러:", e)
 
@@ -49,7 +50,7 @@ def get_news():
             if articles:
                 news_collection.insert_many(articles)
                 
-                # 에러 해결: MongoDB가 만든 고유 ID(_id)를 일반 문자로 변환
+                # _id 일반 문자로 변환
                 for article in articles:
                     article['_id'] = str(article['_id'])
                 
@@ -63,6 +64,19 @@ def get_news():
             
     except Exception as e:
         return jsonify({"error": str(e)})
+
+# ★ 과거 기록(History) 데이터를 화면으로 보내주는 새로운 통로 추가
+@app.route('/api/history')
+def get_history():
+    try:
+        # history 컬렉션에서 최근 30개의 데이터를 날짜 역순으로 가져옴
+        history_data = list(history_collection.find({}, {'_id': 0}).sort('collected_at', -1).limit(30))
+        return jsonify({
+            "status": "success",
+            "history": history_data
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
