@@ -141,8 +141,10 @@ def analyze_with_gemini(articles, etf_price, post_rate, kdb_rate):
         )
         return response.text
     except Exception as e:
-        print("Gemini API 호출 에러:", str(e), flush=True)
-        return "AI 분석 중 오류가 발생했습니다."
+        error_details = str(e)
+        print("Gemini API 호출 에러:", error_details, flush=True)
+        # 에러 발생 시 그 원인을 화면에 띄워주도록 수정
+        return f"🚨 AI 분석 중 오류가 발생했습니다.\n\n[상세 원인]: {error_details}\n\n이 영문 에러 메시지를 복사해서 알려주시면 즉시 해결해 드리겠습니다."
 
 def collect_daily_data():
     try:
