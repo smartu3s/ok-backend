@@ -3,80 +3,83 @@ from flask_cors import CORS
 import os
 import requests
 from pymongo import MongoClient
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime
+import pytz
 
 app = Flask(__name__)
 CORS(app)
 
-# 1. 환경 변수 불러오기 (네이버 키 및 MongoDB 주소)
 NAVER_CLIENT_ID = os.environ.get('NAVER_CLIENT_ID')
 NAVER_CLIENT_SECRET = os.environ.get('NAVER_CLIENT_SECRET')
 MONGO_URI = os.environ.get('MONGO_URI')
 
-# 2. MongoDB 연결 설정
 try:
     client = MongoClient(MONGO_URI)
-    db = client['smartu3s_mong'] # 데이터베이스 선택
-    news_collection = db['news'] # 뉴스 저장소
-    history_collection = db['history'] # 과거 기록 저장소 추가
+    db = client['smartu3s_mong']
+    news_collection = db['news']
+    history_collection = db['history']
 except Exception as e:
     print("MongoDB 연결 에러:", e)
 
-@app.route('/')
-def home():
-    return "OK Backend Server is Running!"
-
-@app.route('/api/news')
-def get_news():
-    url = "https://openapi.naver.com/v1/search/news.json"
-    headers = {
-        "X-Naver-Client-Id": NAVER_CLIENT_ID,
-        "X-Naver-Client-Secret": NAVER_CLIENT_SECRET
-    }
-    params = {
-        "query": "경제 IT AI",
-        "display": 5,
-        "sort": "date"
-    }
-    
+# ★ 자동 수집을 수행하는 함수 (매일 정해진 시간에 실행됨)
+def collect_daily_data():
     try:
-        # 네이버에서 뉴스 가져오기
+        # 1. 네이버 뉴스 수집
+        url = "https://openapi.naver.com/v1/search/news.json"
+        headers = {
+            "X-Naver-Client-Id": NAVER_CLIENT_ID,
+            "X-Naver-Client-Secret": NAVER_CLIENT_SECRET
+        }
+        params = {"query": "경제 IT AI", "display": 5, "sort": "date"}
         response = requests.get(url, headers=headers, params=params)
         data = response.json()
         
-        if "items" in data:
-            articles = data["items"]
-            
-            # 수집한 뉴스를 MongoDB에 저장하기
-            if articles:
-                news_collection.insert_many(articles)
-                
-                # _id 일반 문자로 변환
-                for article in articles:
-                    article['_id'] = str(article['_id'])
-                
-            return jsonify({
-                "message": "뉴스 수집 및 데이터베이스 저장 성공!", 
-                "saved_count": len(articles),
-                "data": articles
-            })
-        else:
-            return jsonify({"error": "뉴스 검색 실패", "details": data})
-            
+        articles = data.get("items", [])
+        if articles:
+            news_collection.insert_many(articles)
+        
+        # 2. 누적 기록(History) 데이터베이스에 오늘의 수집 결과 저장
+        seoul_time = datetime.now(pytz.timezone('Asia/Seoul'))
+        history_record = {
+            "collected_at": seoul_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "news_count": len(articles),
+            "status": "자동 수집 성공"
+        }
+        history_collection.insert_one(history_record)
+        print("자동 수집 및 기록 저장 완료:", history_record)
+        
     except Exception as e:
-        return jsonify({"error": str(e)})
+        print("자동 수집 에러:", str(e))
 
-# ★ 과거 기록(History) 데이터를 화면으로 보내주는 새로운 통로 추가
+# ★ 스케줄러(타이머) 설정: 한국 시간 기준 매일 15시 30분에 작동
+scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Seoul'))
+scheduler.add_job(func=collect_daily_data, trigger="cron", hour=15, minute=30)
+scheduler.start()
+
+@app.route('/')
+def home():
+    return "OK Backend Server is Running with Scheduler!"
+
+@app.route('/api/news')
+def get_news():
+    # 수동 뉴스 조회 유지
+    articles = list(news_collection.find({}, {'_id': 0}).sort('_id', -1).limit(5))
+    return jsonify({"message": "DB에서 뉴스 불러오기 성공", "data": articles})
+
 @app.route('/api/history')
 def get_history():
     try:
-        # history 컬렉션에서 최근 30개의 데이터를 날짜 역순으로 가져옴
         history_data = list(history_collection.find({}, {'_id': 0}).sort('collected_at', -1).limit(30))
-        return jsonify({
-            "status": "success",
-            "history": history_data
-        })
+        return jsonify({"status": "success", "history": history_data})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
+
+# ★ 당장 테스트해볼 수 있는 '강제 수집' 스위치 추가
+@app.route('/api/force_collect')
+def force_collect():
+    collect_daily_data()
+    return jsonify({"message": "수동으로 자동 수집 함수를 실행했습니다! 화면을 새로고침 해보세요."})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
