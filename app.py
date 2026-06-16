@@ -136,7 +136,6 @@ def analyze_with_gemini(articles, etf_price, post_rate, kdb_rate):
         2. 안전 자산(예금)과 투자 자산(배당 ETF) 비율 조절에 대한 직관적인 제안
         """
         
-        # 모델명을 gemini-2.0-flash 로 수정
         response = ai_client.models.generate_content(
             model='gemini-2.0-flash',
             contents=prompt
@@ -205,6 +204,21 @@ def get_history():
 
 @app.route('/api/force_collect')
 def force_collect():
+    # 1. 한국 시간 기준으로 오늘 날짜 추출
+    seoul_time = datetime.now(pytz.timezone('Asia/Seoul'))
+    today_str = seoul_time.strftime("%Y-%m-%d")
+
+    # 2. DB에서 가장 최근에 수집된 기록 하나를 불러옴
+    latest_record = history_collection.find_one(sort=[("collected_at", -1)])
+
+    # 3. 가장 최근 기록의 날짜가 '오늘'과 같다면, API를 호출하지 않고 종료
+    if latest_record and latest_record.get('collected_at', '').startswith(today_str):
+        time_collected = latest_record['collected_at']
+        return jsonify({
+            "message": f"오늘은 이미 데이터가 수집되었습니다 ({time_collected}). API 할당량 보호를 위해 기존 데이터를 유지합니다. 화면을 새로고침 하세요."
+        })
+
+    # 4. 오늘 기록이 없다면 정상적으로 데이터 수집 및 AI 분석 진행
     collect_daily_data()
     return jsonify({"message": "Gemini AI 분석 및 데이터 수집 완료! 화면을 새로고침 하세요."})
 
