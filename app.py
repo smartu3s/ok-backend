@@ -136,9 +136,9 @@ def analyze_with_gemini(articles, etf_price, post_rate, kdb_rate):
         2. 안전 자산(예금)과 투자 자산(배당 ETF) 비율 조절에 대한 직관적인 제안
         """
         
-        # 2026년 최신 Pro 모델 적용
+        # 가장 안정적이고 범용적인 모델명 사용
         response = ai_client.models.generate_content(
-            model='gemini-3.1-pro',
+            model='gemini-pro',
             contents=prompt
         )
         return response.text
