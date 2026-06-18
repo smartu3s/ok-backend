@@ -136,8 +136,9 @@ def analyze_with_gemini(articles, etf_price, post_rate, kdb_rate):
         2. 안전 자산(예금)과 투자 자산(배당 ETF) 비율 조절에 대한 직관적인 제안
         """
         
+        # 여기서 최신 모델인 1.5-flash를 사용합니다.
         response = ai_client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-1.5-flash',
             contents=prompt
         )
         return response.text
@@ -189,7 +190,6 @@ scheduler.start()
 def home():
     return "OK Backend Server with Gemini AI!"
 
-# [복구] 예전 앱들이 정상 동작하기 위해 필요한 경로들
 @app.route('/api/news')
 def get_news():
     articles = list(news_collection.find({}, {'_id': 0}).sort('_id', -1).limit(5))
@@ -203,7 +203,6 @@ def get_history():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
-# 새 대시보드 화면에 데이터를 보내주는 경로
 @app.route('/api/data', methods=['GET'])
 def get_ai_data():
     try:
@@ -215,7 +214,6 @@ def get_ai_data():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# 강제로 즉시 수집하는 경로
 @app.route('/api/force_collect')
 def force_collect():
     collect_daily_data()
