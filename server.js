@@ -4,7 +4,10 @@ const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+    origin: ['https://ok-consulting.kr', 'https://www.ok-consulting.kr'],
+    credentials: true
+}));
 
 // 발급받은 토큰과 만료 시간을 서버가 기억하도록 변수 생성
 let kisAccessToken = null;
