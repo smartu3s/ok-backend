@@ -1351,4 +1351,36 @@
         root.render(<ErrorBoundary><App /></ErrorBoundary>);
     </script>
 </body>
+<script>
+  // 1. 마우스 우클릭 방지
+  document.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+  });
+
+  // 2. 키보드 단축키 방지 (F12, 개발자 도구, 소스 보기, 복사 등)
+  document.addEventListener('keydown', function(e) {
+      // F12 키 차단
+      if (e.keyCode === 123) {
+          e.preventDefault();
+      }
+      // Ctrl + Shift + I / J (개발자 도구 단축키) 차단
+      if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74)) {
+          e.preventDefault();
+      }
+      // Ctrl + U (페이지 소스 보기), Ctrl + C (복사) 차단
+      if (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 67)) {
+          e.preventDefault();
+      }
+  });
+
+  // 3. 마우스 텍스트 드래그 및 블록 지정 방지
+  document.addEventListener('selectstart', function(e) {
+      e.preventDefault();
+  });
+
+  // 4. 드래그 앤 드롭 방지
+  document.addEventListener('dragstart', function(e) {
+      e.preventDefault();
+  });
+</script>
 </html>
