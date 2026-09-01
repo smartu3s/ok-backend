@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>O.K 캐시플로우 엔진</title>
+    <title>O.K 캐시플로우 엔진 [V1.7 보안버전]</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -20,11 +20,12 @@
     </script>
 
     <style>
-        html, body { height: 100%; margin: 0; background-color: #f8fafc; word-break: keep-all; }
+        html, body { height: 100%; margin: 0; background-color: #f8fafc; word-break: break-all; overflow-wrap: break-word; overflow-x: hidden; }
+        * { max-width: 100vw; box-sizing: border-box; }
         #root { height: 100%; display: flex; flex-direction: column; }
         .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
         #print-report-template { display: none; }
         @media print {
             @page { margin: 0mm; size: A4; }
@@ -130,11 +131,12 @@
         const ChevronUp = (p) => <Icon {...p} d='<polyline points="18 15 12 9 6 15"></polyline>'/>;
         const CheckCircle = (p) => <Icon {...p} d='<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>'/>;
         const Newspaper = (p) => <Icon {...p} d='<path d="M4 4h16v16H4z"></path><path d="M16 8h-6M16 12h-6M16 16h-6M7 8h.01M7 12h.01M7 16h.01"/>'/>;
+        const Lock = (p) => <Icon {...p} d='<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>'/>;
 
         const HelpTooltip = ({ text }) => (
             <span className="inline-flex items-center justify-center bg-slate-300 hover:bg-indigo-500 text-white rounded-full w-[16px] h-[16px] text-[11px] cursor-help ml-1.5 relative group font-bold align-text-bottom transition-colors">
                 ?
-                <span className="hidden group-hover:block absolute bottom-full mb-1 left-1/2 -translate-x-1/2 w-[240px] bg-slate-800 text-slate-100 text-[11.5px] p-3 rounded-xl shadow-xl z-[100] font-normal text-left break-keep leading-relaxed pointer-events-none after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-[6px] after:border-transparent after:border-t-slate-800">
+                <span className="hidden group-hover:block absolute bottom-full mb-1 left-1/2 -translate-x-1/2 w-[240px] bg-slate-800 text-slate-100 text-[12px] p-3 rounded-xl shadow-xl z-[100] font-normal text-left break-words leading-relaxed pointer-events-none after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-[6px] after:border-transparent after:border-t-slate-800">
                     {text}
                 </span>
             </span>
@@ -161,6 +163,11 @@
         };
 
         function App() {
+            // === 보안 로그인 상태 관리 ===
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [passwordInput, setPasswordInput] = useState('');
+            const CORRECT_PASSWORD = "0000"; // ★여기를 원하시는 비밀번호로 변경하세요★
+
             const [isLoading, setIsLoading] = useState(true);
             const [dbProducts, setDbProducts] = useState(null);
             const [alertData, setAlertData] = useState({ isOpen: false, title: '', message: '', type: 'info' });
@@ -188,7 +195,14 @@
             const [useIRP, setUseIRP] = useState(true);
             const [irpPeople, setIrpPeople] = useState(1); 
             const [irpLimitPerPerson, setIrpLimitPerPerson] = useState(18000000); 
+            
+            // IRP 분리: 위험자산
+            const [irpRiskyRatio, setIrpRiskyRatio] = useState(70);
             const [irpId, setIrpId] = useState(''); const [irpBank, setIrpBank] = useState(''); const [irpName, setIrpName] = useState(''); const [irpRate, setIrpRate] = useState(0); const [irpPeriod, setIrpPeriod] = useState(''); 
+            
+            // IRP 분리: 안전자산
+            const [irpSafeId, setIrpSafeId] = useState(''); const [irpSafeBank, setIrpSafeBank] = useState(''); const [irpSafeName, setIrpSafeName] = useState(''); const [irpSafeRate, setIrpSafeRate] = useState(0); const [irpSafePeriod, setIrpSafePeriod] = useState('');
+
             const [yearsToRetire, setYearsToRetire] = useState(3); const [irpPayoutYears, setIrpPayoutYears] = useState(5); const [irpCompanyDeposit, setIrpCompanyDeposit] = useState(20000000); const [irpCompanyDepositMonth, setIrpCompanyDepositMonth] = useState(36); 
 
             const [useISA, setUseISA] = useState(true);
@@ -213,11 +227,42 @@
             const [dbHistory, setDbHistory] = useState([]);
             const [liveNews, setLiveNews] = useState([]);
 
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if (passwordInput === CORRECT_PASSWORD) {
+                    setIsAuthenticated(true);
+                } else {
+                    alert('접근 코드가 일치하지 않습니다.');
+                    setPasswordInput('');
+                }
+            };
+
+            const formatAIAnalysis = (text) => {
+                if (!text) return null;
+                return text.split('\n').map((line, index) => {
+                    if (line.startsWith('### ')) return <h4 key={index} className="text-[14px] font-black text-indigo-800 mt-4 mb-1 flex items-center gap-1.5"><Zap size={14}/> {line.replace('### ', '')}</h4>;
+                    if (line.startsWith('## ')) return <h3 key={index} className="text-base font-black text-indigo-900 mt-2 mb-3 border-b border-indigo-200 pb-2">{line.replace('## ', '')}</h3>;
+                    
+                    const parts = line.split(/(\*\*.*?\*\*)/g);
+                    const formattedLine = parts.map((part, i) => {
+                        if (part.startsWith('**') && part.endsWith('**')) {
+                            return <strong key={i} className="text-indigo-900 bg-indigo-100/50 px-1 rounded">{part.replace(/\*\*/g, '')}</strong>;
+                        }
+                        return part;
+                    });
+
+                    return line.trim() === '' ? <div key={index} className="h-2"></div> : <p key={index} className="my-1 text-[13px] leading-relaxed text-slate-700">{formattedLine}</p>;
+                });
+            };
+
             const showAlert = (title, message, type = 'info') => setAlertData({ isOpen: true, title, message, type });
 
             const syncRatesWithDB = (db) => {
                 const sync = (id, cat, setR) => { if(id && id !== 'custom' && db && db[cat]) { const p = db[cat].find(x => x.id === id); if(p) setR(p.rate); } };
-                sync(taxFreeId, 'taxFree', setTaxFreeRate); sync(irpId, 'irp', setIrpRate); sync(isaId, 'isa', setIsaRate); sync(coopId, 'coop', setCoopRate); sync(parkingId, 'parking', setParkingRate);
+                sync(taxFreeId, 'taxFree', setTaxFreeRate); 
+                sync(irpId, 'irp', setIrpRate); 
+                sync(irpSafeId, 'irp', setIrpSafeRate);
+                sync(isaId, 'isa', setIsaRate); sync(coopId, 'coop', setCoopRate); sync(parkingId, 'parking', setParkingRate);
                 setTermDeposits(prev => prev.map(td => {
                     if (td.dbId && td.dbId !== 'custom' && db && db.general) {
                         const prod = db.general.find(p => p.id === td.dbId);
@@ -250,8 +295,11 @@
                 const tf = getBest(baseData.taxFree);
                 if(tf) { setTaxFreeId(tf.id); setTaxFreeBank(tf.bank); setTaxFreeName(tf.name); setTaxFreeRate(tf.rate); setTaxFreePeriod(tf.period); setTaxFreeIsGov(tf.isGov); }
                 
-                const irp = getBest(baseData.irp);
-                if(irp) { setIrpId(irp.id); setIrpBank(irp.bank); setIrpName(irp.name); setIrpRate(irp.rate); setIrpPeriod(irp.period); }
+                const irpRisky = baseData.irp.filter(p => p.group === 'sec').sort((a, b) => b.rate - a.rate)[0];
+                if(irpRisky) { setIrpId(irpRisky.id); setIrpBank(irpRisky.bank); setIrpName(irpRisky.name); setIrpRate(irpRisky.rate); setIrpPeriod(irpRisky.period); }
+
+                const irpSafe = baseData.irp.filter(p => p.group === 'bank').sort((a, b) => b.rate - a.rate)[0];
+                if(irpSafe) { setIrpSafeId(irpSafe.id); setIrpSafeBank(irpSafe.bank); setIrpSafeName(irpSafe.name); setIrpSafeRate(irpSafe.rate); setIrpSafePeriod(irpSafe.period); }
                 
                 const isa = getBest(baseData.isa);
                 if(isa) { setIsaId(isa.id); setIsaBank(isa.bank); setIsaName(isa.name); setIsaRate(isa.rate); setIsaPeriod(isa.period); setIsaIsGov(isa.isGov); }
@@ -356,18 +404,27 @@
             const applyTheme = (theme, isInitial = false) => {
                 setActiveTheme(theme); setUseAutoAdjust(true); setHasUncalculatedChanges(true);
                 if (theme === 1) { 
-                    setUseIRP(true); setIrpPeople(1); setIrpId('irp_s1'); setIrpBank('미래에셋(TIGER)'); setIrpName('TIGER 미국배당다우존스'); setIrpRate(7.0); setIrpPeriod('수시매매'); setYearsToRetire(3);
+                    setUseIRP(true); setIrpPeople(1); setYearsToRetire(3); setIrpRiskyRatio(70);
+                    setIrpId('irp_s1'); setIrpBank('미래에셋(TIGER)'); setIrpName('TIGER 미국배당다우존스'); setIrpRate(7.0); setIrpPeriod('수시매매'); 
+                    setIrpSafeId('irp_b3'); setIrpSafeBank('저축은행'); setIrpSafeName('고금리 퇴직예금'); setIrpSafeRate(4.5); setIrpSafePeriod('1년 만기'); 
+                    
                     setUseISA(true); setIsaPeople(3); setIsaId('isa_s1'); setIsaBank('삼성(KODEX)'); setIsaName('KODEX 미국배당다우존스'); setIsaRate(7.0); setIsaPeriod('수시매매'); setIsaIsGov(false);
                     setTaxFreeId('tf_b1'); setTaxFreeBank('우체국'); setTaxFreeName('특판 정기예금'); setTaxFreeRate(4.2); setTaxFreePeriod('1년 만기'); setTaxFreeIsGov(true);
                     setCoopId('coop_b1'); setCoopBank('지역농협'); setCoopName('특판 예탁금'); setCoopRate(4.8); setCoopPeriod('1년 만기');
                     setParkingId('pk_b1'); setParkingBank('KDB산업은행'); setParkingName('KDB Hi 비대면 입출금통장'); setParkingRate(3.5); setParkingPeriod('수시입출금'); setParkingIsGov(true);
                     setTermDeposits([{ id: Date.now(), dbId: 'gen_s1', bank: "미래에셋(TIGER)", product: "TIGER 미국배당다우존스 ETF", rate: 7.0, isGov: false, period: "수시매매(월배당)", returnPrincipal: true, targetAmount: null }, { id: Date.now()+1, dbId: 'gen_b2', bank: "산업은행", product: "KDB 정기예금", rate: 4.1, isGov: true, period: "1년 만기", returnPrincipal: true, targetAmount: 100000000 }]);
                 } else if (theme === 2) { 
-                    setUseIRP(true); setIrpPeople(1); setIrpId('irp_s2'); setIrpBank('한국투자(ACE)'); setIrpName('ACE 미국S&P500'); setIrpRate(10.0); setIrpPeriod('수시매매'); setYearsToRetire(10);
+                    setUseIRP(true); setIrpPeople(1); setYearsToRetire(10); setIrpRiskyRatio(70);
+                    setIrpId('irp_s2'); setIrpBank('한국투자(ACE)'); setIrpName('ACE 미국S&P500'); setIrpRate(10.0); setIrpPeriod('수시매매'); 
+                    setIrpSafeId('irp_b3'); setIrpSafeBank('저축은행'); setIrpSafeName('고금리 퇴직예금'); setIrpSafeRate(4.5); setIrpSafePeriod('1년 만기'); 
+                    
                     setUseISA(true); setIsaPeople(3); setIsaId('isa_s2'); setIsaBank('미래에셋(TIGER)'); setIsaName('TIGER 미국S&P500'); setIsaRate(10.0); setIsaPeriod('수시매매'); setIsaIsGov(false);
                     setTermDeposits([{ id: Date.now(), dbId: 'gen_s3', bank: "삼성(KODEX)", product: "KODEX 미국나스닥100TR ETF", rate: 15.0, isGov: false, period: "수시매매(성장)", returnPrincipal: true, targetAmount: null }]);
                 } else if (theme === 3) { 
-                    setUseIRP(true); setIrpPeople(1); setIrpId('irp_s1'); setIrpBank('미래에셋(TIGER)'); setIrpName('TIGER 미국배당다우존스'); setIrpRate(7.0); setIrpPeriod('수시매매'); setYearsToRetire(5);
+                    setUseIRP(true); setIrpPeople(1); setYearsToRetire(5); setIrpRiskyRatio(50);
+                    setIrpId('irp_s1'); setIrpBank('미래에셋(TIGER)'); setIrpName('TIGER 미국배당다우존스'); setIrpRate(7.0); setIrpPeriod('수시매매'); 
+                    setIrpSafeId('irp_b3'); setIrpSafeBank('저축은행'); setIrpSafeName('고금리 퇴직예금'); setIrpSafeRate(4.5); setIrpSafePeriod('1년 만기'); 
+                    
                     setUseISA(true); setIsaPeople(3); setIsaId('isa_s1'); setIsaBank('삼성(KODEX)'); setIsaName('KODEX 미국배당다우존스'); setIsaRate(7.0); setIsaPeriod('수시매매'); setIsaIsGov(false);
                     setTermDeposits([{ id: Date.now(), dbId: 'gen_s2', bank: "한국투자(ACE)", product: "ACE 미국배당다우존스 ETF", rate: 7.0, isGov: false, period: "수시매매(월배당)", returnPrincipal: true, targetAmount: null }, { id: Date.now()+1, dbId: 'gen_b1', bank: "새마을금고", product: "MG더뱅킹정기예금", rate: 4.8, isGov: false, period: "1년 만기", returnPrincipal: true, targetAmount: 100000000 }]);
                 }
@@ -405,7 +462,16 @@
                     if (!dbProducts) return;
                     const getMember = (i) => `참여자 ${i+1}`; 
                     const effTaxFree = useTaxFree ? (Number(taxFreeRate)/100||0) : 0; 
-                    const effIRP = useIRP ? (Number(irpRate)/100||0) * (1 - TAX_RATES.IRP_PENSION) : 0; 
+                    
+                    // --- IRP 70:30 사용자가 분리한 비중 기반 통합 수익률 산출 ---
+                    const ratioR = Math.min(70, Math.max(0, Number(irpRiskyRatio))) / 100;
+                    const ratioS = 1 - ratioR;
+                    const irpInputRate = Number(irpRate)/100||0;
+                    const irpSafeInputRate = Number(irpSafeRate)/100||0;
+                    const actualIrpRate = (irpInputRate * ratioR) + (irpSafeInputRate * ratioS);
+                    const effIRP = useIRP ? actualIrpRate * (1 - TAX_RATES.IRP_PENSION) : 0;
+                    // ------------------------------------
+
                     const effISA = useISA ? (Number(isaRate)/100||0) * (1 - TAX_RATES.ISA_SEPARATE) : 0; 
                     const effTaxCoopMember = useCoop ? (Number(coopRate)/100||0) * (1 - TAX_RATES.COOP_MEMBER) : 0; 
                     const effTaxCoopHigh = useCoop ? (Number(coopRate)/100||0) * (1 - TAX_RATES.COOP_HIGH) : 0; 
@@ -433,6 +499,7 @@
                         buckets.push({ key: `gen_${index}`, name: `일반자산 (${bkStr || '입력'})`, effRate: effGn, capacity: safeAmount * termPeople, alloc: 0, peakAlloc: 0, originalAlloc: 0, index, periodMonths: parsedMonths, priority: 5, isSafe: isSafeAsset });
                     });
 
+                    // 폭포수 배분 알고리즘 적용
                     buckets.sort((a, b) => { if (a.priority !== b.priority) return a.priority - b.priority; if (Math.abs(b.effRate - a.effRate) > 0.00001) return b.effRate - a.effRate; return a.periodMonths - b.periodMonths; });
 
                     let reservedForParking = Math.min(assets, parkingTotal); let remaining = assets - reservedForParking;
@@ -476,27 +543,29 @@
                         let tIS = 0; let tTS = 0; let tNS = 0; let tINP = 0; 
                         let dY = { tfG: 0, tfT: 0, irpG: 0, irpT: 0, isaG: 0, isaT: 0, cmG: 0, cmT: 0, chG: 0, chT: 0, termG: 0, termT: 0, pkG: 0, pkT: 0 };
                         let cfY = { maxT: 0 };
+                        let cII = 0; // ISA 누적 이자(복리 재투자 방지용 독립 변수)
 
                         for (let m = 1; m <= years * 12; m++) {
                             const sB = cPB; let stL = 0;
                             if (enableStressTest && m === STRESS_TEST_CONFIG.TARGET_MONTH) {
-                                if (useIRP && cIrP > 0) { const l = cIrP * STRESS_TEST_CONFIG.DROP_RATE; cIrP -= l; stL += l; }
+                                if (useIRP && cIrP > 0) { const l = cIrP * ratioR * STRESS_TEST_CONFIG.DROP_RATE; cIrP -= l; stL += l; } 
                                 if (useISA && cIP > 0) { const l = cIP * STRESS_TEST_CONFIG.DROP_RATE; cIP -= l; stL += l; }
                                 termStats.forEach(ts => { if (!ts.isSafe && ts.alloc > 0) { const l = ts.alloc * STRESS_TEST_CONFIG.DROP_RATE; ts.alloc -= l; stL += l; }});
                             }
                             let mPG = cPB > 0 ? cPB * ((Number(parkingRate)/100||0) / 12) : 0; let mPT = mPG * TAX_RATES.GENERAL; let mPN = Math.floor(mPG - mPT); 
                             dY.pkG += mPG; dY.pkT += mPT;
                             let cMD = 0; let cMPR = 0; let isaDiv = 0; let irpPC = 0; let cMIP = 0; let cMIG = 0; let cMIT = 0; let sevIn = 0; let cMITR = 0; 
+                            let additionalTaxNote = "";
 
                             if (useIRP) {
                                 if (m === irpCompanyDepositMonth && irpCompanyDeposit > 0) { sevIn = irpCompanyDeposit; cIrP += sevIn; irpTotalDeposit += sevIn; if (isIrpP && irpMR > 0) irpMPP = Math.floor(cIrP / irpMR); }
                                 if (!isIrpP) {
-                                    if (m > 1 && m % 12 === 1) { const yD = irpPeople * irpLimitPerPerson; cPB -= yD; cIrP += yD; irpTotalDeposit += yD; irpPC = -yD; cMITR = yD * 0.132; cPB += cMITR; }
-                                    if (cIrP > 0) { const mI = cIrP * ((Number(irpRate)/100||0) / 12); aIrG += mI; dY.irpG += mI; }
+                                    if (m > 1 && m % 12 === 1) { const yD = irpPeople * irpLimitPerPerson; cPB -= yD; cIrP += yD; irpTotalDeposit += yD; irpPC = -yD; let thisRefund = yD * 0.132; cMITR += thisRefund; cPB += thisRefund; }
+                                    if (cIrP > 0) { const mI = cIrP * (actualIrpRate / 12); aIrG += mI; dY.irpG += mI; }
                                     if (m === irpRM) { isIrpP = true; cIrP += aIrG; aIrG = 0; irpMPP = Math.floor(cIrP / irpPTM); irpMR = irpPTM; }
                                 } else {
                                     if (irpMR > 0) {
-                                        cMIG = cIrP * ((Number(irpRate)/100||0) / 12); let vR = irpTotalDeposit > 0 ? Math.max(0, (irpTotalDeposit - irpCompanyDeposit) / irpTotalDeposit) : 1; let sR = irpTotalDeposit > 0 ? Math.min(1, irpCompanyDeposit / irpTotalDeposit) : 0;
+                                        cMIG = cIrP * (actualIrpRate / 12); let vR = irpTotalDeposit > 0 ? Math.max(0, (irpTotalDeposit - irpCompanyDeposit) / irpTotalDeposit) : 1; let sR = irpTotalDeposit > 0 ? Math.min(1, irpCompanyDeposit / irpTotalDeposit) : 0;
                                         let irpIT = cMIG * TAX_RATES.IRP_PENSION; let irpPT = irpMPP * ((vR * TAX_RATES.IRP_PENSION) + (sR * TAX_RATES.IRP_SEVERANCE)); 
                                         cMIT = irpIT + irpPT; cMIP = Math.floor((cMIG - irpIT) + (irpMPP - irpPT));
                                         if (firstIrpPayout === 0) firstIrpPayout = cMIP; cPB += cMIP; cIrP -= irpMPP; irpMR--; tINP += (irpMPP - irpPT); dY.irpG += cMIG; dY.irpT += irpIT; irpPC = irpMPP; 
@@ -509,13 +578,35 @@
                             const bCH = currentBuckets.find(b => b.key === 'coopHigh'); if (bCH && bCH.alloc > 0) { let mI = bCH.alloc * ((Number(coopRate)/100||0) / 12); bCH.accumulatedGross += mI; dY.chG += mI; dY.chT += mI * TAX_RATES.COOP_HIGH; }
                             termStats.forEach(ts => { if (ts.alloc > 0) { let mI = ts.alloc * ((Number(ts.rate)||0)/100 / 12); ts.accumulatedGross += mI; dY.termG += mI; dY.termT += mI * TAX_RATES.GENERAL; }});
 
+                            // ISA 3년 만기 세금 정산 및 IRP 롤오버 (투자공백 제로)
+                            let isaPC = 0;
                             if (useISA) {
-                                let mI = cIP * ((Number(isaRate)/100||0) / 12); dY.isaG += mI;
-                                if ((m > 0 && m % 36 === 0) || m === years * 12) {
-                                    let cG = 0; let cY = Math.ceil((m % 36 === 0 ? 36 : m % 36) / 12);
-                                    for(let y=1; y<=cY; y++) cG += (isaLimitPerPerson * y) * (Number(isaRate)/100||0);
-                                    cG *= isaPeople; let iG = cG / isaPeople; let iT = iG > LIMITS.ISA_FREE_LIMIT ? (iG - LIMITS.ISA_FREE_LIMIT) * TAX_RATES.ISA_SEPARATE : 0;
-                                    let tP = iT * isaPeople; dY.isaT += tP; if(m % 36 === 0) isaDiv = cG - tP;
+                                let mI_isa = cIP > 0 ? cIP * ((Number(isaRate)/100||0) / 12) : 0;
+                                cII += mI_isa;
+                                dY.isaG += mI_isa;
+
+                                if (m > 0 && m % 36 === 0) {
+                                    let iG = cII / (isaPeople || 1);
+                                    let iT = iG > LIMITS.ISA_FREE_LIMIT ? (iG - LIMITS.ISA_FREE_LIMIT) * TAX_RATES.ISA_SEPARATE : 0;
+                                    let tP = iT * isaPeople;
+                                    dY.isaT += tP;
+                                    let isaNetPayout = cIP + cII - tP;
+                                    cII = 0; // 이자 리셋
+
+                                    if (useIRP && irpPeople > 0) {
+                                        cIrP += isaNetPayout;
+                                        irpTotalDeposit += isaNetPayout;
+                                        let refundPerPerson = Math.min(3000000, (isaNetPayout / (isaPeople || 1)) * 0.10) * 0.132;
+                                        let isaBonus = refundPerPerson * isaPeople;
+                                        cPB += isaBonus;
+                                        cMITR += isaBonus; 
+                                        cIP = 0; // 원금 리셋
+                                        additionalTaxNote += ` [ISA->IRP 자동이전 및 환급 +${formatKRW(isaBonus)}]`;
+                                    } else {
+                                        isaDiv += isaNetPayout; // IRP 안쓰면 파킹으로 현금 유입
+                                        cIP = 0; 
+                                        additionalTaxNote += ` [ISA 만기 해지]`;
+                                    }
                                 }
                             }
 
@@ -527,50 +618,45 @@
 
                             termStats.forEach(ts => { 
                                 if (m > 0 && m % ts.tdMonths === 0) {
-                                    cMD += ts.accumulatedGross * (1 - TAX_RATES.GENERAL); ts.accumulatedGross = 0;
-                                    if (ts.returnPrincipal && ts.alloc > 0) {
-                                        if (ts.tdMonths === 1) { if (m === years * 12) { cPB += ts.alloc; cMPR += ts.alloc; const b = currentBuckets.find(bk => bk.key === ts.key); if(b) b.alloc -= ts.alloc; ts.alloc = 0; } } 
-                                        else { cPB += ts.alloc; cMPR += ts.alloc; const b = currentBuckets.find(bk => bk.key === ts.key); if(b) b.alloc -= ts.alloc; ts.alloc = 0; }
+                                    let netInt = ts.accumulatedGross * (1 - TAX_RATES.GENERAL);
+                                    ts.accumulatedGross = 0;
+                                    
+                                    if (ts.tdMonths === 1) { // ETF 등 수시지급형
+                                        cMD += netInt; 
+                                        if (ts.returnPrincipal && m === years * 12) {
+                                            cPB += ts.alloc; cMPR += ts.alloc;
+                                            const b = currentBuckets.find(bk => bk.key === ts.key); if(b) b.alloc -= ts.alloc; ts.alloc = 0;
+                                        }
+                                    } else { // 예적금 등 기간형 (투자공백 제로 롤오버)
+                                        if (m === years * 12) {
+                                            cPB += ts.alloc + netInt; cMPR += ts.alloc;
+                                            const b = currentBuckets.find(bk => bk.key === ts.key); if(b) b.alloc -= ts.alloc; ts.alloc = 0;
+                                        } else {
+                                            ts.alloc += netInt; // 세후 이자 원금에 편입 (복리)
+                                            const b = currentBuckets.find(bk => bk.key === ts.key); if(b) b.alloc += netInt;
+                                        }
                                     }
                                 }
                             });
 
                             let cME = monthlyExpense; if (m > 1) { const pY = Math.floor((m - 1) / 12); if (pY > 0) cME = monthlyExpense * Math.pow(1 + (inflationRate / 100), pY); }
+                            
+                            // 당월 유출입 반영
                             cPB += mPN + nationalPension + cMD + isaDiv - cME;
-                            if (cPB < minPB) minPB = cPB; if (cPB < 0 && bankruptMonth === null) bankruptMonth = m;
 
-                            let isaPC = 0;
-                            if (useISA) {
-                                if (m > 1 && m % 36 === 1) { const mR = cIP; const nD = isaPeople * isaLimitPerPerson; cPB = cPB + mR - nD; cIP = nD; isaPC = mR - nD; } 
-                                else if (m > 1 && m % 12 === 1) { const yD = isaPeople * isaLimitPerPerson; cPB -= yD; cIP += yD; isaPC = -yD; }
-                            }
-                            if (cPB < minPB) minPB = cPB; 
-                            let cMS = 0;
-                            if (useAutoAdjust) {
-                                if (cPB > parkingTotal && m < years * 12) {
-                                    let rE = cPB - parkingTotal;
-                                    const sOut = currentBuckets.filter(b => !['irp', 'isa', 'taxFree', 'coopMember'].includes(b.key) && b.alloc < b.capacity).sort((a,b) => { if (a.priority !== b.priority) return a.priority - b.priority; if (Math.abs(b.effRate - a.effRate) > 0.00001) return b.effRate - a.effRate; return a.periodMonths - b.periodMonths; });
-                                    for (let b of sOut) {
-                                        if (rE <= 0) break; const aC = b.capacity - b.alloc; if (aC <= 0) continue;
-                                        const d = Math.min(rE, aC); b.alloc += d; if (b.alloc > (b.peakAlloc || 0)) b.peakAlloc = b.alloc;
-                                        rE -= d; cPB -= d; cMS += d;
-                                        if (b.key.startsWith('gen_')) { const ts = termStats.find(t => t.key === b.key); if(ts) ts.alloc += d; }
-                                    }
-                                } else if (cPB < parkingTotal) {
-                                    let def = parkingTotal - cPB;
-                                    const sIn = currentBuckets.filter(b => !['irp', 'isa', 'taxFree', 'coopMember'].includes(b.key) && b.alloc > 0).sort((a,b) => { if (a.priority !== b.priority) return b.priority - a.priority; if (Math.abs(a.effRate - b.effRate) > 0.00001) return a.effRate - b.effRate; return a.periodMonths - b.periodMonths; });
-                                    for (let b of sIn) {
-                                        if (def <= 0) break; const w = Math.min(def, b.alloc); b.alloc -= w; def -= w; cPB += w; cMS -= w;
-                                        if (b.key.startsWith('gen_')) { const ts = termStats.find(t => t.key === b.key); if(ts) ts.alloc -= w; }
-                                    }
-                                }
+                            // ISA 당해년도 납입
+                            if (useISA && m > 1 && m % 12 === 1) { 
+                                const yD = isaPeople * isaLimitPerPerson; 
+                                cPB -= yD; cIP += yD; isaPC = -yD; 
                             }
 
-                            mData.push({ month: m, startingBalance: sB, parkingInterest: mPN, dividends: cMD + isaDiv, principalReturned: cMPR, nationalPension, irpPensionPayout: cMIP, irpTaxRefund: cMITR, isaPrincipalChange: isaPC, irpPrincipalChange: irpPC, severanceInflow: sevIn, sweepAmount: cMS, withdrawal: cME, endingBalance: cPB, shortfall: Math.max(0, parkingTotal - cPB), stressTestLoss: stL });
+                            // 연말 종합 과세 계산
+                            let healthInsPenalty = 0;
+                            let compTaxPenalty = 0;
+                            let totalPenalty = 0;
 
                             if (m % 12 === 0) {
-                                const yr = m / 12; const yP = []; let yTG = 0; let yTT = 0;
-                                
+                                const yr = m / 12;
                                 let memberTaxable = {};
                                 const addIncome = (idx, amount) => {
                                     if(amount <= 0) return;
@@ -595,10 +681,6 @@
                                 if (parkingPeople > 0 && dY.pkG > 0) {
                                     for(let i=0; i<parkingPeople; i++) addIncome(i, dY.pkG * getRatio(parkingPeople, i));
                                 }
-
-                                let healthInsPenalty = 0;
-                                let compTaxPenalty = 0;
-                                let additionalTaxNote = "";
                                 
                                 for (let mName in memberTaxable) {
                                     let inc = memberTaxable[mName];
@@ -606,41 +688,97 @@
                                         healthInsPenalty += inc * 0.08;
                                     }
                                     if (inc > LIMITS.COMPREHENSIVE_TAX) {
-                                        compTaxPenalty += (inc - LIMITS.COMPREHENSIVE_TAX) * 0.15;
+                                        // 2천만원 초과분에 대해서만 정확히 페널티 부과
+                                        let excess = inc - LIMITS.COMPREHENSIVE_TAX;
+                                        compTaxPenalty += excess * 0.15; 
                                     }
                                 }
 
-                                if (healthInsPenalty > 0) additionalTaxNote += `건보료 타격(-${formatManWon(healthInsPenalty)}) `;
-                                if (compTaxPenalty > 0) additionalTaxNote += `종소세 폭탄(-${formatManWon(compTaxPenalty)})`;
+                                if (healthInsPenalty > 0) additionalTaxNote += ` 건보료 타격(-${formatManWon(healthInsPenalty)})`;
+                                if (compTaxPenalty > 0) additionalTaxNote += ` 종소세 폭탄(-${formatManWon(compTaxPenalty)})`;
                                 
-                                const totalPenalty = healthInsPenalty + compTaxPenalty;
+                                totalPenalty = healthInsPenalty + compTaxPenalty;
                                 cPB -= totalPenalty; 
-
-                                let isaBonus = 0;
-                                if (m === 36 && useISA && useIRP && cIP > 0) {
-                                    isaBonus = 396000; 
-                                    cPB += isaBonus;
-                                    additionalTaxNote += ` [ISA->IRP 이전 세액공제 환급 +${formatKRW(isaBonus)}]`;
-                                }
-
+                                
+                                const yP = []; let yTG = 0; let yTT = 0;
                                 const addP = (name, prin, g, t, note) => { yP.push({ name, principal: prin, interest: g, tax: t, net: g - t, note }); yTG += g; yTT += t; };
                                 
                                 if (m === years * 12 && useIRP && !isIrpP && cIrP > 0) dY.irpT += aIrG * TAX_RATES.IRP_PENSION;
                                 if (bTF && bTF.alloc > 0) addP('1. 비과세 종합저축', bTF.alloc, dY.tfG, dY.tfT, '비과세');
-                                if (irpAlloc > 0 || cIrP > 0 || irpMR > 0) addP('2. IRP (개인형 퇴직연금)', cIrP, dY.irpG, dY.irpT, isIrpP ? '연금수령중' : '과세이연');
+                                
+                                if (irpAlloc > 0 || cIrP > 0 || irpMR > 0) {
+                                    let irpNote = isIrpP ? '연금수령중' : '과세이연';
+                                    irpNote += ` (위험 ${Math.round(ratioR*100)}% / 안전 ${Math.round(ratioS*100)}%)`;
+                                    addP('2. IRP (개인형 퇴직연금)', cIrP, dY.irpG, dY.irpT, irpNote);
+                                }
+
                                 if (cIP > 0 || useISA) addP('3. 중개형 ISA', cIP, dY.isaG, dY.isaT, 'ISA 비과세 한도');
                                 if (bCM && bCM.alloc > 0) addP('4-1. 조합원(3천이하)', bCM.alloc, dY.cmG, dY.cmT, '저율과세');
                                 if (bCH && bCH.alloc > 0) addP('4-2. 고소득 조합원', bCH.alloc, dY.chG, dY.chT, '일반과세');
                                 const cTB = termStats.reduce((a, td) => a + td.alloc, 0);
                                 if (cTB > 0 || dY.termG > 0) addP('5. 일반 위탁/예탁', cTB, dY.termG, dY.termT, m === years * 12 && dY.termG > 0 && cTB === 0 ? '(만기 종료)' : '일반과세');
-                                addP('6. 파킹통장 및 세금정산', cPB, dY.pkG, dY.pkT + totalPenalty - isaBonus, additionalTaxNote.trim() || '수시입출금');
+                                addP('6. 파킹통장 및 세금정산', cPB, dY.pkG, dY.pkT + totalPenalty, additionalTaxNote.trim() || '수시입출금');
 
-                                tIS += yTG; tTS += (yTT + totalPenalty - isaBonus); tNS += (yTG - (yTT + totalPenalty - isaBonus));
-                                yData.push({ year: yr, products: yP, totalPrincipal: (bTF?bTF.alloc:0)+cIrP+cIP+(bCM?bCM.alloc:0)+(bCH?bCH.alloc:0)+cTB+cPB, totalInterest: yTG, totalTax: yTT + totalPenalty - isaBonus, netInterest: yTG - (yTT + totalPenalty - isaBonus), taxableIncomes: memberTaxable });
+                                yP.sort((a, b) => b.net - a.net);
+
+                                tIS += yTG; tTS += (yTT + totalPenalty); tNS += (yTG - (yTT + totalPenalty));
+                                yData.push({ year: yr, products: yP, totalPrincipal: (bTF?bTF.alloc:0)+cIrP+cIP+(bCM?bCM.alloc:0)+(bCH?bCH.alloc:0)+cTB+cPB, totalInterest: yTG, totalTax: yTT + totalPenalty, netInterest: yTG - (yTT + totalPenalty), taxableIncomes: memberTaxable });
                                 dY = { tfG:0, tfT:0, irpG:0, irpT:0, isaG:0, isaT:0, cmG:0, cmT:0, chG:0, chT:0, termG:0, termT:0, pkG:0, pkT:0 }; cfY.maxT = 0;
                             }
+
+                            // 마이너스 잔고(원금 고갈) 방어 로직 (주식 매도)
+                            if (cPB < 0) {
+                                let deficit = -cPB;
+                                let soldAmount = 0;
+                                // 1. 일반 투자 자산(ETF 등)에서 매도
+                                for (let ts of termStats) {
+                                    if (deficit <= 0) break;
+                                    if (ts.alloc > 0) {
+                                        let sell = Math.min(ts.alloc, deficit);
+                                        ts.alloc -= sell;
+                                        deficit -= sell;
+                                        soldAmount += sell;
+                                        const bk = currentBuckets.find(b => b.key === ts.key);
+                                        if (bk) bk.alloc -= sell;
+                                    }
+                                }
+                                // 2. 그래도 부족하면 ISA에서 매도
+                                if (deficit > 0 && useISA && cIP > 0) {
+                                    let sell = Math.min(cIP, deficit);
+                                    cIP -= sell;
+                                    deficit -= sell;
+                                    soldAmount += sell;
+                                }
+                                cPB += soldAmount; // 매도한 금액만큼 마이너스 메꿈
+                                if (cPB < 0 && bankruptMonth === null) bankruptMonth = m; // 완전히 고갈 시
+                            }
+                            if (cPB < minPB) minPB = cPB; 
+                            
+                            let cMS = 0;
+                            if (useAutoAdjust && cPB > 0) {
+                                if (cPB > parkingTotal && m < years * 12) {
+                                    let rE = cPB - parkingTotal;
+                                    const sOut = currentBuckets.filter(b => !['irp', 'isa', 'taxFree', 'coopMember'].includes(b.key) && b.alloc < b.capacity).sort((a,b) => { if (a.priority !== b.priority) return a.priority - b.priority; if (Math.abs(b.effRate - a.effRate) > 0.00001) return b.effRate - a.effRate; return a.periodMonths - b.periodMonths; });
+                                    for (let b of sOut) {
+                                        if (rE <= 0) break; const aC = b.capacity - b.alloc; if (aC <= 0) continue;
+                                        const d = Math.min(rE, aC); b.alloc += d; if (b.alloc > (b.peakAlloc || 0)) b.peakAlloc = b.alloc;
+                                        rE -= d; cPB -= d; cMS += d;
+                                        if (b.key.startsWith('gen_')) { const ts = termStats.find(t => t.key === b.key); if(ts) ts.alloc += d; }
+                                    }
+                                } else if (cPB < parkingTotal) {
+                                    let def = parkingTotal - cPB;
+                                    const sIn = currentBuckets.filter(b => !['irp', 'isa', 'taxFree', 'coopMember'].includes(b.key) && b.alloc > 0).sort((a,b) => { if (a.priority !== b.priority) return b.priority - a.priority; if (Math.abs(a.effRate - b.effRate) > 0.00001) return a.effRate - b.effRate; return a.periodMonths - b.periodMonths; });
+                                    for (let b of sIn) {
+                                        if (def <= 0) break; const w = Math.min(def, b.alloc); b.alloc -= w; def -= w; cPB += w; cMS -= w;
+                                        if (b.key.startsWith('gen_')) { const ts = termStats.find(t => t.key === b.key); if(ts) ts.alloc -= w; }
+                                    }
+                                }
+                            }
+
+                            mData.push({ month: m, startingBalance: sB, parkingInterest: mPN, dividends: cMD + isaDiv, principalReturned: cMPR, nationalPension, irpPensionPayout: cMIP, irpTaxRefund: cMITR, isaPrincipalChange: isaPC, irpPrincipalChange: irpPC, severanceInflow: sevIn, sweepAmount: cMS, withdrawal: cME, endingBalance: cPB, shortfall: Math.max(0, parkingTotal - cPB), stressTestLoss: stL });
                         }
-                        if (useIRP && firstIrpPayout === 0) { let pP = cIrP + (yearsToRetire > years ? (yearsToRetire - years) * irpPeople * irpLimitPerPerson : 0); if (irpCompanyDepositMonth > years * 12) pP += irpCompanyDeposit; firstIrpPayout = Math.floor((pP / irpPTM + pP * ((Number(irpRate)/100||0) / 12)) * (1 - TAX_RATES.IRP_PENSION)); }
+
+                        if (useIRP && firstIrpPayout === 0) { let pP = cIrP + (yearsToRetire > years ? (yearsToRetire - years) * irpPeople * irpLimitPerPerson : 0); if (irpCompanyDepositMonth > years * 12) pP += irpCompanyDeposit; firstIrpPayout = Math.floor((pP / irpPTM + pP * (actualIrpRate / 12)) * (1 - TAX_RATES.IRP_PENSION)); }
                         return { totalInterestSum: tIS, totalTaxSum: tTS, totalNetSum: tNS, yearlyData: yData, monthlyData: mData, bankruptMonth, minSimulatedParkingBalance: minPB, termStats, initialParking: initialParkingBalance, finalParkingAlloc: cPB, finalBuckets: currentBuckets, finalIsaPrincipal: cIP, finalIrpPrincipal: cIrP, totalIrpNetPrincipalPayoutSum: tINP, firstIrpPayout: useIRP ? firstIrpPayout : 0, irpTotalDeposit };
                     };
 
@@ -673,6 +811,7 @@
                     };
                     
                     const aW = (tA, pC, lP, bk, aT, pN, iG, mO=0) => { 
+                        if(pC <= 0 || tA <= 0) return; // 유령 데이터 원천 차단
                         let r = tA; const sL = lP > 0 ? lP : Infinity; 
                         for(let i=0; i<pC; i++) { 
                             if (r <= 0) break; 
@@ -680,17 +819,19 @@
                             const assigned = aP(bk, getMember(i + mO), aT, pN, target, iG); 
                             r -= assigned; 
                         } 
-                        if (r > 0) aP(bk, getMember(0), aT, pN, r, iG);
+                        if (r > 0 && pC > 0) aP(bk, getMember(0), aT, pN, r, iG);
                     };
                     
                     const gO = (k) => { const b = cS.finalBuckets.find(bk => bk.key === k); return b ? b.originalAlloc : 0; };
 
-                    aW(gO('taxFree'), taxFreePeople, taxFreeLimitPerPerson, taxFreeBank, "비과세 계좌", taxFreeName || taxFreeBank, taxFreeIsGov);
-                    aW(gO('irp'), irpPeople, irpLimitPerPerson, irpBank, "IRP 계좌", irpName || irpBank, false);
-                    aW(gO('isa'), isaPeople, isaLimitPerPerson, isaBank, "ISA 계좌", isaName || isaBank, isaIsGov);
-                    aW(gO('coopMember'), coopMemberPeople, 30000000, coopBank, "조합원 계좌", coopName || coopBank, false);
-                    aW(gO('coopHigh'), coopHighIncomePeople, coopLimitPerPerson, coopBank, "고소득조합원 계좌", coopName || coopBank, false, coopMemberPeople);
-                    if (initialParkingBalance > 0) aW(initialParkingBalance, parkingPeople, Infinity, parkingBank, "수시입출금 계좌", parkingName || parkingBank, parkingIsGov); 
+                    // 참여자 수(People)가 0인 패널의 할당을 원천 방지
+                    aW(gO('taxFree'), useTaxFree ? taxFreePeople : 0, taxFreeLimitPerPerson, taxFreeBank, "비과세 계좌", taxFreeName || taxFreeBank, taxFreeIsGov);
+                    aW(gO('irp') * ratioR, useIRP ? irpPeople : 0, irpLimitPerPerson * ratioR, irpBank, "IRP 계좌(위험)", irpName || irpBank, false);
+                    aW(gO('irp') * ratioS, useIRP ? irpPeople : 0, irpLimitPerPerson * ratioS, irpSafeBank, "IRP 계좌(안전)", irpSafeName || irpSafeBank, false);
+                    aW(gO('isa'), useISA ? isaPeople : 0, isaLimitPerPerson, isaBank, "ISA 계좌", isaName || isaBank, isaIsGov);
+                    aW(gO('coopMember'), useCoop ? coopMemberPeople : 0, 30000000, coopBank, "조합원 계좌", coopName || coopBank, false);
+                    aW(gO('coopHigh'), useCoop ? coopHighIncomePeople : 0, coopLimitPerPerson, coopBank, "고소득조합원 계좌", coopName || coopBank, false, coopMemberPeople);
+                    if (initialParkingBalance > 0) aW(initialParkingBalance, parkingPeople > 0 ? parkingPeople : 1, Infinity, parkingBank, "수시입출금 계좌", parkingName || parkingBank, parkingIsGov); 
                     
                     const gS = (idx) => cS.finalBuckets.filter(b => b.index === idx || b.parentIndex === idx).reduce((s, b) => s + b.originalAlloc, 0);
                     for(let td of cS.termStats) { const tP = gS(td.index); if (tP > 0 && termPeople > 0) { let r = tP; let lA = td.targetAmount ? td.targetAmount : (td.isGov ? Infinity : safeLimit); for(let i=0; i<termPeople; i++) { if (r <= 0) break; const a = (i === termPeople - 1) ? r : Math.min(r, lA); aP(td.bank, getMember(i), "일반위탁 계좌", td.product || '일반상품', a, td.isGov); r -= a; } } }
@@ -709,7 +850,7 @@
                     const tSA = buckets.filter(b => b.isSafe).reduce((s, b) => s + b.alloc, 0) + initialParkingBalance;
 
                     setPlan({ totalInterest: cS.totalInterestSum, totalTaxSum: cS.totalTaxSum, netInterest: cS.totalNetSum, yearlyData: cS.yearlyData, monthlyData: cS.monthlyData, bankruptMonth: cS.bankruptMonth, protectionReports: pR, guideByMember: gB, allocationOrderInfo: buckets.filter(b => b.alloc > 0 || (b.peakAlloc && b.peakAlloc > 0)).map(b => `${b.name}(${b.effRate.toFixed(2)}%)`), finalBuckets: cS.finalBuckets, finalParking: cS.finalParkingAlloc, finalIsaPrincipal: cS.finalIsaPrincipal, finalIrpPrincipal: cS.finalIrpPrincipal, totalIrpNetPrincipalPayoutSum: cS.totalIrpNetPrincipalPayoutSum, firstIrpPayout: cS.firstIrpPayout, irpTotalDeposit: cS.irpTotalDeposit, hasCompTaxRisk: hCT, compTaxRiskDetails: cTR, hasHealthInsRisk: hHI, healthInsRiskDetails: hIR, getSummedAllocForPanel: gS, safeRatio: (tSA / assets) * 100, totalSafe: tSA, years, assets, nationalPension, monthlyExpense });
-                    setCalculatedSnapshot(JSON.stringify({ enableStressTest, assets, taxFreePeople, irpPeople, isaPeople, coopMemberPeople, coopHighIncomePeople, parkingPeople, useTaxFree, useIRP, useISA, useCoop, taxFreeRate, irpRate, isaRate, coopRate, parkingRate, termDeposits, safeLimit, years, termPeople, parkingTotal, taxFreeBank, irpBank, isaBank, coopBank, parkingBank, taxFreeIsGov, isaIsGov, irpLimitPerPerson, taxFreeLimitPerPerson, isaLimitPerPerson, coopLimitPerPerson, parkingIsGov, monthlyExpense, nationalPension, useAutoAdjust, yearsToRetire, irpPayoutYears, inflationRate, irpCompanyDeposit, irpCompanyDepositMonth, taxFreePeriod, irpPeriod, isaPeriod, coopPeriod, parkingPeriod }));
+                    setCalculatedSnapshot(JSON.stringify({ irpRiskyRatio, irpSafeId, irpSafeRate, irpSafeBank, irpSafePeriod, enableStressTest, assets, taxFreePeople, irpPeople, isaPeople, coopMemberPeople, coopHighIncomePeople, parkingPeople, useTaxFree, useIRP, useISA, useCoop, taxFreeRate, irpRate, isaRate, coopRate, parkingRate, termDeposits, safeLimit, years, termPeople, parkingTotal, taxFreeBank, irpBank, isaBank, coopBank, parkingBank, taxFreeIsGov, isaIsGov, irpLimitPerPerson, taxFreeLimitPerPerson, isaLimitPerPerson, coopLimitPerPerson, parkingIsGov, monthlyExpense, nationalPension, useAutoAdjust, yearsToRetire, irpPayoutYears, inflationRate, irpCompanyDeposit, irpCompanyDepositMonth, taxFreePeriod, irpPeriod, isaPeriod, coopPeriod, parkingPeriod }));
                     setHasUncalculatedChanges(false);
                 } catch (e) { console.error(e); showAlert('계산 오류 ⚠️', '오류가 발생했습니다: ' + e.message, 'error'); }
             };
@@ -719,9 +860,9 @@
 
             useEffect(() => {
                 if (!plan) return;
-                const cS = JSON.stringify({ enableStressTest, assets, taxFreePeople, irpPeople, isaPeople, coopMemberPeople, coopHighIncomePeople, parkingPeople, useTaxFree, useIRP, useISA, useCoop, taxFreeRate, irpRate, isaRate, coopRate, parkingRate, termDeposits, safeLimit, years, termPeople, parkingTotal, taxFreeBank, irpBank, isaBank, coopBank, parkingBank, taxFreeIsGov, isaIsGov, irpLimitPerPerson, taxFreeLimitPerPerson, isaLimitPerPerson, coopLimitPerPerson, parkingIsGov, monthlyExpense, nationalPension, useAutoAdjust, yearsToRetire, irpPayoutYears, inflationRate, irpCompanyDeposit, irpCompanyDepositMonth, taxFreePeriod, irpPeriod, isaPeriod, coopPeriod, parkingPeriod });
+                const cS = JSON.stringify({ irpRiskyRatio, irpSafeId, irpSafeRate, irpSafeBank, irpSafePeriod, enableStressTest, assets, taxFreePeople, irpPeople, isaPeople, coopMemberPeople, coopHighIncomePeople, parkingPeople, useTaxFree, useIRP, useISA, useCoop, taxFreeRate, irpRate, isaRate, coopRate, parkingRate, termDeposits, safeLimit, years, termPeople, parkingTotal, taxFreeBank, irpBank, isaBank, coopBank, parkingBank, taxFreeIsGov, isaIsGov, irpLimitPerPerson, taxFreeLimitPerPerson, isaLimitPerPerson, coopLimitPerPerson, parkingIsGov, monthlyExpense, nationalPension, useAutoAdjust, yearsToRetire, irpPayoutYears, inflationRate, irpCompanyDeposit, irpCompanyDepositMonth, taxFreePeriod, irpPeriod, isaPeriod, coopPeriod, parkingPeriod });
                 if (calculatedSnapshot !== cS) setHasUncalculatedChanges(true); else setHasUncalculatedChanges(false);
-            }, [enableStressTest, assets, taxFreePeople, irpPeople, isaPeople, coopMemberPeople, coopHighIncomePeople, parkingPeople, useTaxFree, useIRP, useISA, useCoop, taxFreeRate, irpRate, isaRate, coopRate, parkingRate, termDeposits, safeLimit, years, termPeople, parkingTotal, taxFreeBank, irpBank, isaBank, coopBank, parkingBank, taxFreeIsGov, isaIsGov, irpLimitPerPerson, taxFreeLimitPerPerson, isaLimitPerPerson, coopLimitPerPerson, parkingIsGov, monthlyExpense, nationalPension, useAutoAdjust, yearsToRetire, irpPayoutYears, inflationRate, irpCompanyDeposit, irpCompanyDepositMonth, taxFreePeriod, irpPeriod, isaPeriod, coopPeriod, parkingPeriod, calculatedSnapshot, plan]);
+            }, [irpRiskyRatio, irpSafeId, irpSafeRate, irpSafeBank, irpSafePeriod, enableStressTest, assets, taxFreePeople, irpPeople, isaPeople, coopMemberPeople, coopHighIncomePeople, parkingPeople, useTaxFree, useIRP, useISA, useCoop, taxFreeRate, irpRate, isaRate, coopRate, parkingRate, termDeposits, safeLimit, years, termPeople, parkingTotal, taxFreeBank, irpBank, isaBank, coopBank, parkingBank, taxFreeIsGov, isaIsGov, irpLimitPerPerson, taxFreeLimitPerPerson, isaLimitPerPerson, coopLimitPerPerson, parkingIsGov, monthlyExpense, nationalPension, useAutoAdjust, yearsToRetire, irpPayoutYears, inflationRate, irpCompanyDeposit, irpCompanyDepositMonth, taxFreePeriod, irpPeriod, isaPeriod, coopPeriod, parkingPeriod, calculatedSnapshot, plan]);
 
             const PID = ({ c, id, ip }) => { if (!dbProducts || id === 'custom' || !id || !dbProducts[c]) return null; const pd = dbProducts[c].find(p => p.id === id); if (!pd) return null; return (<div className="mt-1.5 p-2 bg-slate-50/80 rounded border border-slate-200 text-[11px] text-slate-600 flex flex-col gap-1.5 shadow-sm"><div className="flex items-start gap-1"><Clock size={13} className="text-blue-500 flex-shrink-0 mt-0.5" /><span><strong className="text-slate-800">최소 예치기간:</strong> {pd.period} <span className="text-slate-400">(설정: {ip})</span></span></div><div className="flex items-start gap-1"><ShieldCheck size={13} className={(pd.protection && (pd.protection.includes('보증')||pd.protection.includes('전액')))?"text-blue-600 flex-shrink-0 mt-0.5":"text-emerald-500 flex-shrink-0 mt-0.5"} /><span><strong className="text-slate-800">보호수준:</strong> <span className={(pd.protection && (pd.protection.includes('보증')||pd.protection.includes('전액')))?"text-blue-700 font-bold":""}>{pd.protection || '정보없음'}</span></span></div><div className="flex items-start gap-1"><AlertTriangle size={13} className="text-orange-500 flex-shrink-0 mt-0.5" /><span><strong className="text-slate-800">제한사항:</strong> {pd.limit}</span></div></div>); };
             const AS = ({ t, tg, i, f, p, cc }) => { if (!plan) return null; const dV = p !== undefined ? p : f; const df = dV - i; let dT = ""; let dC = ""; if (df > 0) { dT = `(+${new Intl.NumberFormat('ko-KR').format(df)}원 추가)`; dC = "text-blue-600"; } else if (df < 0) { dT = `(${new Intl.NumberFormat('ko-KR').format(df)}원 회수)`; dC = "text-rose-600"; } else { dT = "(설정 유지)"; dC = "text-slate-400"; } return (<div className={`mt-3 p-3 rounded-xl bg-slate-50/80 border border-slate-200 shadow-inner flex flex-col gap-2`}><div className={`text-[11px] font-bold text-slate-700 flex items-center gap-1`}><TrendingUp size={14} className={cc}/> {t} 배분 및 변동</div><div className="flex justify-between items-center text-[11px] bg-white/70 px-2 py-1.5 rounded"><span className="text-slate-500 font-medium">설정 한도:</span><span className="font-bold text-slate-600">{tg === Infinity ? '무제한 (전액)' : new Intl.NumberFormat('ko-KR').format(tg) + '원'}</span></div><div className="flex justify-between items-center text-[11px] bg-white/70 px-2 py-1.5 rounded"><span className="text-slate-500 font-medium">첫 달 초기 배분:</span><span className="font-bold text-slate-600">{new Intl.NumberFormat('ko-KR').format(i)}원</span></div><div className="flex justify-between items-center text-xs bg-white px-2 py-1.5 rounded border border-slate-100 shadow-sm"><span className={`font-bold text-slate-800`}>실제 운용 (최대치):</span><div className="flex flex-col items-end"><span className={`font-black ${cc} text-sm`}>{new Intl.NumberFormat('ko-KR').format(dV)}원</span><span className={`text-[10px] font-bold mt-0.5 ${dC}`}>{dT}</span></div></div></div>); };
@@ -730,6 +871,45 @@
 
             const overL = plan ? plan.protectionReports.filter(r => r.isOverLimit) : []; const hasOL = overL.length > 0;
 
+            // === 보안 로그인 화면 ===
+            if (!isAuthenticated) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
+                        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8 relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 to-purple-600"></div>
+                            <div className="flex justify-center mb-6">
+                                <div className="bg-indigo-100 text-indigo-600 p-4 rounded-full">
+                                    <Lock size={32} />
+                                </div>
+                            </div>
+                            <h2 className="text-2xl font-black text-center text-slate-800 mb-2 tracking-tight">테스터 전용 접속</h2>
+                            <p className="text-center text-slate-500 text-sm mb-8">안전한 테스트 환경을 위해 접근 코드를 입력해 주세요.</p>
+                            
+                            <form onSubmit={handleLogin} className="space-y-6">
+                                <div>
+                                    <input 
+                                        type="password" 
+                                        value={passwordInput}
+                                        onChange={(e) => setPasswordInput(e.target.value)}
+                                        placeholder="접근 코드 (예: 0000)" 
+                                        className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-xl font-bold tracking-[0.2em] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                                        autoFocus
+                                    />
+                                </div>
+                                <button 
+                                    type="submit" 
+                                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-4 rounded-xl shadow-lg transition-colors"
+                                >
+                                    시스템 접속하기
+                                </button>
+                            </form>
+                            <p className="text-center text-slate-400 text-[10px] mt-6">O.K Consulting Private Test Environment</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // === V1.7 메인 앱 화면 시작 ===
             return (
                 <React.Fragment>
                 <div className="app-main-ui flex flex-col lg:h-full w-full bg-slate-50 p-4 md:p-8 lg:overflow-hidden overflow-y-auto">
@@ -737,21 +917,40 @@
                     <div className="w-full flex flex-col lg:h-full space-y-6 min-h-0">
                         
                         <div className="shrink-0 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0 gap-4">
-                            <div className="flex items-center space-x-4 flex-1">
+                            <div className="flex items-center space-x-4 flex-1 w-full">
                                 <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl flex-shrink-0"><Calculator size={32} /></div>
                                 <div>
                                     <div className="flex items-center gap-2 mb-1">
-                                        <h1 className="text-2xl font-black text-slate-900 tracking-tight break-keep">마르지 않는 노후 파이프라인: O.K 캐시플로우 엔진</h1>
+                                        <h1 className="text-2xl font-black text-slate-900 tracking-tight break-words">마르지 않는 노후 파이프라인: O.K 캐시플로우 엔진 <span className="text-indigo-600 text-lg align-middle">[V1.7]</span></h1>
                                     </div>
-                                    <p className="text-slate-600 font-bold text-[13px] sm:text-sm break-keep">세금은 철벽 방어하고 유휴 자금은 무한 순환하는, <span className="text-indigo-600">당신만의 평생 안심 자산 Navigator</span></p>
+                                    <p className="text-slate-600 font-bold text-[13px] sm:text-sm break-words">세금은 철벽 방어하고 유휴 자금은 무한 순환하는, <span className="text-indigo-600">당신만의 평생 안심 자산 Navigator</span></p>
                                     <p className="text-slate-400 font-medium text-[11px] mt-1">입력값을 변경하신 후 꼭 <strong className="text-indigo-600">[새로 계산하기]</strong> 버튼을 눌러주세요.</p>
+                                    
+                                    <div className="mt-3 inline-flex items-center gap-2 bg-indigo-50 border border-indigo-100 py-1.5 px-3 rounded-lg">
+                                        <span className="text-xs font-bold text-indigo-800">🖥️ PC 큰 화면으로 보기: ok-consulting.kr</span>
+                                        <button onClick={() => { navigator.clipboard.writeText('https://ok-consulting.kr').then(() => alert('웹 주소가 복사되었습니다. 카카오톡이나 인터넷 창에 붙여넣기 하세요!')); }} className="text-[10px] bg-indigo-600 text-white font-bold px-2 py-1 rounded shadow-sm hover:bg-indigo-700 transition">
+                                            주소 복사
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto items-stretch h-auto sm:h-[80px]">
-                                <button onClick={handleFetchAPI} className="w-full sm:w-[160px] h-full rounded-xl flex flex-col items-center justify-center gap-1.5 font-extrabold transition-all shadow-md text-sm bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"><Zap size={20} className="text-indigo-500" /><span>실시간 데이터 연동</span></button>
-                                <button id="calc-btn" onClick={handleCalculate} className={`w-full sm:w-[160px] h-full rounded-xl flex flex-col items-center justify-center gap-1.5 font-extrabold transition-all shadow-md text-sm ${hasUncalculatedChanges ? 'bg-indigo-600 text-white hover:bg-indigo-700 ring-4 ring-indigo-300 animate-pulse' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}><Calculator size={20} /><span>{hasUncalculatedChanges ? '새로 계산하기' : '계산 완료'}</span></button>
-                                <div className="bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl shadow-inner w-full sm:w-[220px] h-full flex flex-col justify-center relative overflow-hidden">{hasUncalculatedChanges && <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center"><span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-200 shadow-sm animate-pulse pointer-events-none">재계산 대기중</span></div>}<div className="flex justify-between text-[11px] font-black mb-1.5"><span className="text-blue-600 flex items-center gap-0.5">🛡️ 안전 {plan ? plan.safeRatio.toFixed(1) : 0}%</span><span className="text-amber-600 flex items-center gap-0.5">🚀 투자 {plan ? (100 - plan.safeRatio).toFixed(1) : 0}%</span></div><div className="w-full bg-slate-200 rounded-full h-2.5 flex overflow-hidden shadow-inner"><div className="bg-gradient-to-r from-blue-400 to-blue-600 h-full transition-all duration-500" style={{ width: `${plan ? plan.safeRatio : 0}%` }}></div><div className="bg-gradient-to-r from-amber-400 to-amber-600 h-full transition-all duration-500" style={{ width: `${plan ? 100 - plan.safeRatio : 0}%` }}></div></div><div className="flex justify-between text-[9px] text-slate-400 font-bold mt-1.5"><span>{plan ? formatManWon(plan.totalSafe) : '0원'}</span><span>{plan ? formatManWon(plan.assets - plan.totalSafe) : '0원'}</span></div></div>
-                                <div className="bg-indigo-50 px-5 py-2 rounded-xl border border-indigo-200 w-full sm:w-[240px] h-full flex flex-col items-end shadow-inner justify-center relative overflow-hidden">{hasUncalculatedChanges && <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 pointer-events-none"></div>}<span className="text-xs font-bold text-indigo-800 flex items-center gap-1 mb-0.5"><TrendingUp size={14} /> 월 평균 배당수익 ({plan ? plan.years : years}년)</span><span className="text-xl font-black text-indigo-600 leading-none">{plan ? formatKRW(plan.netInterest / (plan.years * 12)) : '0원'}</span><div className="mt-1 text-[9px] font-bold text-indigo-500 bg-indigo-100/70 px-1.5 py-0.5 rounded border border-indigo-200/50">세후 연수익률: 약 {plan ? ((plan.netInterest / plan.years) / plan.assets * 100).toFixed(2) : 0}%</div></div>
+                                <button onClick={handleFetchAPI} className="w-full sm:w-[160px] h-full py-3 sm:py-0 rounded-xl flex flex-col items-center justify-center gap-1.5 font-extrabold transition-all shadow-md text-sm bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"><Zap size={20} className="text-indigo-500 shrink-0" /><span>실시간 데이터 연동</span></button>
+                                <button id="calc-btn" onClick={handleCalculate} className={`w-full sm:w-[160px] h-full py-3 sm:py-0 rounded-xl flex flex-col items-center justify-center gap-1.5 font-extrabold transition-all shadow-md text-sm ${hasUncalculatedChanges ? 'bg-indigo-600 text-white hover:bg-indigo-700 ring-4 ring-indigo-300 animate-pulse' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}><Calculator size={20} className="shrink-0" /><span>{hasUncalculatedChanges ? '새로 계산하기' : '계산 완료'}</span></button>
+                                
+                                <div className="bg-slate-50 border border-slate-200 p-3 sm:px-4 sm:py-2 rounded-xl shadow-inner w-full sm:w-[220px] min-h-[80px] h-full flex flex-col justify-center relative overflow-hidden">
+                                    {hasUncalculatedChanges && <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center"><span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-200 shadow-sm animate-pulse pointer-events-none">재계산 대기중</span></div>}
+                                    <div className="flex justify-between text-[11px] font-black mb-1.5"><span className="text-blue-600 flex items-center gap-0.5">🛡️ 안전 {plan ? plan.safeRatio.toFixed(1) : 0}%</span><span className="text-amber-600 flex items-center gap-0.5">🚀 투자 {plan ? (100 - plan.safeRatio).toFixed(1) : 0}%</span></div>
+                                    <div className="w-full bg-slate-200 rounded-full h-2.5 flex overflow-hidden shadow-inner"><div className="bg-gradient-to-r from-blue-400 to-blue-600 h-full transition-all duration-500" style={{ width: `${plan ? plan.safeRatio : 0}%` }}></div><div className="bg-gradient-to-r from-amber-400 to-amber-600 h-full transition-all duration-500" style={{ width: `${plan ? 100 - plan.safeRatio : 0}%` }}></div></div>
+                                    <div className="flex justify-between text-[9px] text-slate-400 font-bold mt-1.5"><span>{plan ? formatManWon(plan.totalSafe) : '0원'}</span><span>{plan ? formatManWon(plan.assets - plan.totalSafe) : '0원'}</span></div>
+                                </div>
+                                
+                                <div className="bg-indigo-50 p-3 sm:px-5 sm:py-2 rounded-xl border border-indigo-200 w-full sm:w-[240px] min-h-[80px] h-full flex flex-col items-center sm:items-end shadow-inner justify-center relative overflow-hidden">
+                                    {hasUncalculatedChanges && <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 pointer-events-none"></div>}
+                                    <span className="text-xs font-bold text-indigo-800 flex items-center justify-center sm:justify-end gap-1 mb-1 sm:mb-0.5 w-full text-center sm:text-right break-words"><TrendingUp size={14} className="shrink-0" /> 월 평균 배당수익 ({plan ? plan.years : years}년)</span>
+                                    <span className="text-xl font-black text-indigo-600 leading-none w-full text-center sm:text-right break-all">{plan ? formatKRW(plan.netInterest / (plan.years * 12)) : '0원'}</span>
+                                    <div className="mt-1 text-[9px] font-bold text-indigo-500 bg-indigo-100/70 px-1.5 py-0.5 rounded border border-indigo-200/50 text-center sm:text-right w-fit break-words">세후 연수익률: 약 {plan ? ((plan.netInterest / plan.years) / plan.assets * 100).toFixed(2) : 0}%</div>
+                                </div>
                             </div>
                         </div>
 
@@ -774,16 +973,44 @@
                                     </select>
                                 <div className="flex gap-1.5 mt-1.5"><input type="text" value={taxFreeBank} onChange={e=>{setTaxFreeBank(e.target.value); setTaxFreeId('custom'); setHasUncalculatedChanges(true);}} disabled={!useTaxFree} className="w-1/3 p-1.5 text-xs border border-purple-200 rounded bg-white" placeholder="기관명" /><input type="text" value={taxFreeName} onChange={e=>{setTaxFreeName(e.target.value); setTaxFreeId('custom'); setHasUncalculatedChanges(true);}} disabled={!useTaxFree} className="flex-1 p-1.5 text-xs border border-purple-200 rounded bg-white" placeholder="상품명" /></div><div className="flex gap-1.5 mt-1.5"><input type="text" value={taxFreePeriod} onChange={e=>{setTaxFreePeriod(e.target.value); setTaxFreeId('custom'); setHasUncalculatedChanges(true);}} disabled={!useTaxFree} className="w-1/3 p-1.5 text-xs border border-purple-200 rounded bg-white text-center" placeholder="예치기간" /><div className="flex-1 relative"><input type="number" step="0.1" value={taxFreeRate} onChange={e=>{setTaxFreeRate(e.target.value); setTaxFreeId('custom'); setHasUncalculatedChanges(true);}} disabled={!useTaxFree} className="w-full p-1.5 text-xs border border-purple-200 rounded pr-4 text-right bg-white font-bold text-purple-700" /><span className="absolute right-2 top-1.5 text-xs text-slate-500">%</span></div></div><PID c="taxFree" id={taxFreeId} ip={taxFreePeriod} /></div><AS t="비과세" tg={useTaxFree ? taxFreePeople * taxFreeLimitPerPerson : 0} i={plan ? (plan.finalBuckets.find(b=>b.key==='taxFree')?.originalAlloc || 0) : 0} f={plan ? (plan.finalBuckets.find(b=>b.key==='taxFree')?.alloc || 0) : 0} p={plan ? plan.finalBuckets.find(b=>b.key==='taxFree')?.peakAlloc : 0} cc="text-purple-600" /></div>
                                 
-                                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-200 transition-colors"><div className="flex justify-between items-center mb-2"><div className="flex items-center gap-2"><label className="flex items-center gap-2 font-bold text-orange-900 text-sm"><input type="checkbox" checked={useIRP} onChange={(e) => setUseIRP(e.target.checked)} className="w-4 h-4 accent-orange-600"/>[입력 3] IRP (개인형 퇴직연금) (우선순위 2) <HelpTooltip text="노후 자금 마련을 위해 세제 혜택(과세이연/저율과세)을 받는 필수 연금 계좌입니다."/></label></div><div className="flex items-center gap-1"><span className="text-[10px] text-slate-500 flex items-center">인원: <HelpTooltip text="계좌를 운용할 명의자 수를 설정합니다."/></span><button onClick={() => setIrpPeople(Math.max(0, irpPeople - 1))} disabled={!useIRP} className="px-1.5 py-0.5 rounded border bg-slate-100 text-xs">-</button><span className="text-xs font-bold w-3 text-center">{irpPeople}</span><button onClick={() => setIrpPeople(irpPeople + 1)} disabled={!useIRP} className="px-1.5 py-0.5 rounded border bg-slate-100 text-xs">+</button></div></div><div className="flex justify-between items-center bg-orange-50 p-2 rounded-t border border-orange-100 border-b-0"><span className="text-xs font-bold text-orange-700 flex items-center">1인당 매년 자발적 납입 목표액 <HelpTooltip text="매년 IRP 계좌에 자발적으로 납입할 금액입니다. 연간 법정 최대한도는 1,800만 원입니다."/></span><div className="flex items-center gap-1"><NumberInput value={irpLimitPerPerson} onChange={setIrpLimitPerPerson} disabled={!useIRP || yearsToRetire === 0} max={18000000} className="w-32 text-right text-sm border border-orange-200 rounded p-1 font-bold outline-none text-orange-800 disabled:bg-slate-100" /><span className="text-xs text-orange-700">원</span></div></div><div className="flex justify-between items-center bg-orange-50 p-2 border border-orange-100 border-b-0"><span className="text-[11px] font-bold text-orange-800 flex items-center gap-1"><Zap size={12}/> 회사 퇴직금 외부 입금액 <HelpTooltip text="퇴사 시 IRP 계좌로 입금될 회사 퇴직금(퇴직소득) 예상 총액입니다."/></span><div className="flex items-center gap-1"><NumberInput value={irpCompanyDeposit} onChange={setIrpCompanyDeposit} disabled={!useIRP} className="w-28 text-right text-sm border border-orange-200 rounded p-1 font-bold outline-none text-orange-800 disabled:bg-slate-100" /><span className="text-xs text-orange-700">원</span></div></div><div className="flex justify-between items-center bg-orange-50 p-2 border border-orange-100 border-b-0"><span className="text-[11px] font-bold text-orange-800 flex items-center gap-1"><Clock size={12}/> 퇴직금 입금 시점 <HelpTooltip text="회사 퇴직금이 IRP로 입금될 시기(개월 차)를 설정합니다."/></span><div className="flex items-center gap-1"><button onClick={() => setIrpCompanyDepositMonth(Math.max(1, irpCompanyDepositMonth - 1))} disabled={!useIRP} className="px-2 py-0.5 bg-white border border-orange-200 rounded text-orange-700 font-bold">-</button><span className="text-sm font-extrabold w-8 text-center text-orange-900 bg-white py-0.5 border border-orange-200 rounded">{irpCompanyDepositMonth}</span><button onClick={() => setIrpCompanyDepositMonth(irpCompanyDepositMonth + 1)} disabled={!useIRP} className="px-2 py-0.5 bg-white border border-orange-200 rounded text-orange-700 font-bold">+</button><span className="text-[11px] text-orange-700 font-medium ml-1">개월 차</span></div></div><div className="flex justify-between items-center bg-orange-50 p-2 border border-orange-100 border-b-0"><span className="text-[11px] font-bold text-orange-800 flex items-center gap-1"><Clock size={12}/> 연금 개시 시점 <HelpTooltip text="IRP에 모인 자금을 연금으로 받기 시작할 시기(년 후)를 설정합니다. '0'으로 설정하면 첫해부터 즉시 수령합니다."/></span><div className="flex items-center gap-1"><span className="text-[11px] text-orange-700 font-medium">현재로부터</span><div className="flex items-center bg-white border border-orange-200 rounded overflow-hidden"><button onClick={() => setYearsToRetire(Math.max(0, yearsToRetire - 1))} disabled={!useIRP} className="px-2.5 py-0.5 bg-orange-50 text-orange-700 font-bold">-</button><span className="text-sm font-extrabold w-8 text-center text-orange-900 bg-white">{yearsToRetire}</span><button onClick={() => setYearsToRetire(yearsToRetire + 1)} disabled={!useIRP} className="px-2.5 py-0.5 bg-orange-50 text-orange-700 font-bold">+</button></div><span className="text-[11px] text-orange-700 font-medium ml-1">년 후</span></div></div><div className="flex justify-between items-center bg-orange-100/50 p-2 rounded-b border border-orange-100 mb-2"><span className="text-[11px] font-bold text-orange-800 flex items-center gap-1"><Clock size={12}/> 연금 수령 기간 <HelpTooltip text="연금을 몇 년에 걸쳐 나누어 받을지 설정합니다. 길게 받을수록 연금소득세율이 낮아집니다."/></span><div className="flex items-center gap-1"><button onClick={() => setIrpPayoutYears(Math.max(1, irpPayoutYears - 1))} disabled={!useIRP} className="px-2.5 py-0.5 bg-white border border-orange-200 rounded text-orange-700 font-bold">-</button><span className="text-sm font-extrabold w-8 text-center text-orange-900 bg-white border border-orange-200 rounded py-0.5">{irpPayoutYears}</span><button onClick={() => setIrpPayoutYears(irpPayoutYears + 1)} disabled={!useIRP} className="px-2.5 py-0.5 bg-white border border-orange-200 rounded text-orange-700 font-bold">+</button><span className="text-[11px] text-orange-700 font-medium ml-1">년</span></div></div><div className="bg-orange-50/50 p-2.5 rounded-lg border border-orange-100 mb-2 space-y-2">
-                                    <select value={irpId} onChange={(e) => handleProductSelectWrapper('irp', e.target.value, setIrpId, setIrpBank, setIrpName, setIrpRate, setIrpPeriod)} disabled={!useIRP} className="w-full p-1.5 text-xs border border-orange-200 rounded bg-white text-orange-900 font-medium">
-                                        <option value="custom">상품 직접 입력...</option>
-                                        {dbProducts?.irp?.slice().sort((a,b)=>b.rate-a.rate).map((p, idx) => (
-                                            <option key={p.id} value={p.id}>
-                                                {idx === 0 ? '★ 추천: ' : ''}[{p.group==='bank'?'안전':'투자'}] {p.bank} - {p.name} ({p.rate}%)
-                                            </option>
-                                        ))}
-                                    </select>
-                                <div className="flex gap-1.5 mt-1.5"><input type="text" value={irpBank} onChange={e=>{setIrpBank(e.target.value); setIrpId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="w-1/3 p-1.5 text-xs border border-orange-200 rounded bg-white" placeholder="운용사/은행명" /><input type="text" value={irpName} onChange={e=>{setIrpName(e.target.value); setIrpId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="flex-1 p-1.5 text-xs border border-orange-200 rounded bg-white" placeholder="상품명" /></div><div className="flex gap-1.5 mt-1.5"><input type="text" value={irpPeriod} onChange={e=>{setIrpPeriod(e.target.value); setIrpId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="w-1/3 p-1.5 text-xs border border-orange-200 rounded bg-white text-center" placeholder="예치기간" /><div className="flex-1 relative"><input type="number" step="0.1" value={irpRate} onChange={e=>{setIrpRate(e.target.value); setIrpId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="w-full p-1.5 text-xs border border-orange-200 rounded pr-4 text-right bg-white font-bold text-orange-700" /><span className="absolute right-2 top-1.5 text-xs text-slate-500">%</span></div></div><PID c="irp" id={irpId} ip={irpPeriod} /></div><IrpS f={plan ? plan.finalIrpPrincipal : 0} cc="text-orange-600" /></div>
+                                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-200 transition-colors"><div className="flex justify-between items-center mb-2"><div className="flex items-center gap-2"><label className="flex items-center gap-2 font-bold text-orange-900 text-sm"><input type="checkbox" checked={useIRP} onChange={(e) => setUseIRP(e.target.checked)} className="w-4 h-4 accent-orange-600"/>[입력 3] IRP (개인형 퇴직연금) (우선순위 2) <HelpTooltip text="노후 자금 마련을 위해 세제 혜택(과세이연/저율과세)을 받는 필수 연금 계좌입니다."/></label></div><div className="flex items-center gap-1"><span className="text-[10px] text-slate-500 flex items-center">인원: <HelpTooltip text="계좌를 운용할 명의자 수를 설정합니다."/></span><button onClick={() => setIrpPeople(Math.max(0, irpPeople - 1))} disabled={!useIRP} className="px-1.5 py-0.5 rounded border bg-slate-100 text-xs">-</button><span className="text-xs font-bold w-3 text-center">{irpPeople}</span><button onClick={() => setIrpPeople(irpPeople + 1)} disabled={!useIRP} className="px-1.5 py-0.5 rounded border bg-slate-100 text-xs">+</button></div></div><div className="flex justify-between items-center bg-orange-50 p-2 rounded-t border border-orange-100 border-b-0"><span className="text-xs font-bold text-orange-700 flex items-center">1인당 매년 자발적 납입 목표액 <HelpTooltip text="매년 IRP 계좌에 자발적으로 납입할 금액입니다. 연간 법정 최대한도는 1,800만 원입니다."/></span><div className="flex items-center gap-1"><NumberInput value={irpLimitPerPerson} onChange={setIrpLimitPerPerson} disabled={!useIRP || yearsToRetire === 0} max={18000000} className="w-32 text-right text-sm border border-orange-200 rounded p-1 font-bold outline-none text-orange-800 disabled:bg-slate-100" /><span className="text-xs text-orange-700">원</span></div></div><div className="flex justify-between items-center bg-orange-50 p-2 border border-orange-100 border-b-0"><span className="text-[11px] font-bold text-orange-800 flex items-center gap-1"><Zap size={12}/> 회사 퇴직금 외부 입금액 <HelpTooltip text="퇴사 시 IRP 계좌로 입금될 회사 퇴직금(퇴직소득) 예상 총액입니다."/></span><div className="flex items-center gap-1"><NumberInput value={irpCompanyDeposit} onChange={setIrpCompanyDeposit} disabled={!useIRP} className="w-28 text-right text-sm border border-orange-200 rounded p-1 font-bold outline-none text-orange-800 disabled:bg-slate-100" /><span className="text-xs text-orange-700">원</span></div></div><div className="flex justify-between items-center bg-orange-50 p-2 border border-orange-100 border-b-0"><span className="text-[11px] font-bold text-orange-800 flex items-center gap-1"><Clock size={12}/> 퇴직금 입금 시점 <HelpTooltip text="회사 퇴직금이 IRP로 입금될 시기(개월 차)를 설정합니다."/></span><div className="flex items-center gap-1"><button onClick={() => setIrpCompanyDepositMonth(Math.max(1, irpCompanyDepositMonth - 1))} disabled={!useIRP} className="px-2 py-0.5 bg-white border border-orange-200 rounded text-orange-700 font-bold">-</button><span className="text-sm font-extrabold w-8 text-center text-orange-900 bg-white py-0.5 border border-orange-200 rounded">{irpCompanyDepositMonth}</span><button onClick={() => setIrpCompanyDepositMonth(irpCompanyDepositMonth + 1)} disabled={!useIRP} className="px-2 py-0.5 bg-white border border-orange-200 rounded text-orange-700 font-bold">+</button><span className="text-[11px] text-orange-700 font-medium ml-1">개월 차</span></div></div><div className="flex justify-between items-center bg-orange-50 p-2 border border-orange-100 border-b-0"><span className="text-[11px] font-bold text-orange-800 flex items-center gap-1"><Clock size={12}/> 연금 개시 시점 <HelpTooltip text="IRP에 모인 자금을 연금으로 받기 시작할 시기(년 후)를 설정합니다. '0'으로 설정하면 첫해부터 즉시 수령합니다."/></span><div className="flex items-center gap-1"><span className="text-[11px] text-orange-700 font-medium">현재로부터</span><div className="flex items-center bg-white border border-orange-200 rounded overflow-hidden"><button onClick={() => setYearsToRetire(Math.max(0, yearsToRetire - 1))} disabled={!useIRP} className="px-2.5 py-0.5 bg-orange-50 text-orange-700 font-bold">-</button><span className="text-sm font-extrabold w-8 text-center text-orange-900 bg-white">{yearsToRetire}</span><button onClick={() => setYearsToRetire(yearsToRetire + 1)} disabled={!useIRP} className="px-2.5 py-0.5 bg-orange-50 text-orange-700 font-bold">+</button></div><span className="text-[11px] text-orange-700 font-medium ml-1">년 후</span></div></div><div className="flex justify-between items-center bg-orange-100/50 p-2 rounded-b border border-orange-100 mb-2"><span className="text-[11px] font-bold text-orange-800 flex items-center gap-1"><Clock size={12}/> 연금 수령 기간 <HelpTooltip text="연금을 몇 년에 걸쳐 나누어 받을지 설정합니다. 길게 받을수록 연금소득세율이 낮아집니다."/></span><div className="flex items-center gap-1"><button onClick={() => setIrpPayoutYears(Math.max(1, irpPayoutYears - 1))} disabled={!useIRP} className="px-2.5 py-0.5 bg-white border border-orange-200 rounded text-orange-700 font-bold">-</button><span className="text-sm font-extrabold w-8 text-center text-orange-900 bg-white border border-orange-200 rounded py-0.5">{irpPayoutYears}</span><button onClick={() => setIrpPayoutYears(irpPayoutYears + 1)} disabled={!useIRP} className="px-2.5 py-0.5 bg-white border border-orange-200 rounded text-orange-700 font-bold">+</button><span className="text-[11px] text-orange-700 font-medium ml-1">년</span></div></div>
+                                
+                                <div className="bg-orange-50/50 p-2.5 rounded-lg border border-orange-100 mb-2 space-y-3">
+                                    <div className="bg-orange-100/70 p-2 rounded border border-orange-200">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-black text-rose-700 flex items-center gap-1">🔴 위험자산 (최대 70%) <HelpTooltip text="IRP 규정에 따라 주식형 자산은 최대 70%까지만 설정 가능합니다. 비중을 조정해 보세요."/></span>
+                                            <div className="flex items-center gap-1 text-[11px] font-bold text-rose-800 bg-white px-2 py-0.5 rounded border border-rose-200 shadow-sm">
+                                                비중: <input type="number" max="70" min="0" value={irpRiskyRatio} onChange={e => { let v = Number(e.target.value); if(v>70)v=70; if(v<0)v=0; setIrpRiskyRatio(v); setHasUncalculatedChanges(true); }} disabled={!useIRP} className="w-10 text-center font-black text-rose-600 outline-none" /> %
+                                            </div>
+                                        </div>
+                                        <select value={irpId} onChange={(e) => handleProductSelectWrapper('irp', e.target.value, setIrpId, setIrpBank, setIrpName, setIrpRate, setIrpPeriod)} disabled={!useIRP} className="w-full p-1.5 text-xs border border-orange-200 rounded bg-white text-orange-900 font-medium">
+                                            <option value="custom">상품 직접 입력...</option>
+                                            {dbProducts?.irp?.filter(p => p.group === 'sec').sort((a,b)=>b.rate-a.rate).map((p, idx) => (
+                                                <option key={p.id} value={p.id}>{idx === 0 ? '★ 추천: ' : ''}[투자] {p.bank} - {p.name} ({p.rate}%)</option>
+                                            ))}
+                                        </select>
+                                        <div className="flex gap-1.5 mt-1.5"><input type="text" value={irpBank} onChange={e=>{setIrpBank(e.target.value); setIrpId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="w-1/3 p-1.5 text-xs border border-orange-200 rounded bg-white" placeholder="운용사/은행명" /><input type="text" value={irpName} onChange={e=>{setIrpName(e.target.value); setIrpId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="flex-1 p-1.5 text-xs border border-orange-200 rounded bg-white" placeholder="상품명" /></div>
+                                        <div className="flex gap-1.5 mt-1.5"><input type="text" value={irpPeriod} onChange={e=>{setIrpPeriod(e.target.value); setIrpId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="w-1/3 p-1.5 text-xs border border-orange-200 rounded bg-white text-center" placeholder="예치기간" /><div className="flex-1 relative"><input type="number" step="0.1" value={irpRate} onChange={e=>{setIrpRate(e.target.value); setIrpId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="w-full p-1.5 text-xs border border-orange-200 rounded pr-4 text-right bg-white font-bold text-orange-700" /><span className="absolute right-2 top-1.5 text-xs text-slate-500">%</span></div></div>
+                                        <PID c="irp" id={irpId} ip={irpPeriod} />
+                                    </div>
+                                    <div className="bg-emerald-50/70 p-2 rounded border border-emerald-200">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-black text-emerald-700 flex items-center gap-1">🟢 안전자산 (나머지 의무) <HelpTooltip text="위험자산을 제외한 나머지 비중은 원리금보장형 등 안전자산으로 자동 배정됩니다."/></span>
+                                            <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-white px-2 py-1 rounded border border-emerald-200 shadow-sm">
+                                                비중: <span className="w-8 text-center font-black text-emerald-600">{100 - irpRiskyRatio}</span> %
+                                            </div>
+                                        </div>
+                                        <select value={irpSafeId} onChange={(e) => handleProductSelectWrapper('irp', e.target.value, setIrpSafeId, setIrpSafeBank, setIrpSafeName, setIrpSafeRate, setIrpSafePeriod)} disabled={!useIRP} className="w-full p-1.5 text-xs border border-emerald-200 rounded bg-white text-emerald-900 font-medium">
+                                            <option value="custom">상품 직접 입력...</option>
+                                            {dbProducts?.irp?.filter(p => p.group === 'bank').sort((a,b)=>b.rate-a.rate).map((p, idx) => (
+                                                <option key={p.id} value={p.id}>{idx === 0 ? '★ 추천: ' : ''}[안전] {p.bank} - {p.name} ({p.rate}%)</option>
+                                            ))}
+                                        </select>
+                                        <div className="flex gap-1.5 mt-1.5"><input type="text" value={irpSafeBank} onChange={e=>{setIrpSafeBank(e.target.value); setIrpSafeId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="w-1/3 p-1.5 text-xs border border-emerald-200 rounded bg-white" placeholder="운용사/은행명" /><input type="text" value={irpSafeName} onChange={e=>{setIrpSafeName(e.target.value); setIrpSafeId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="flex-1 p-1.5 text-xs border border-emerald-200 rounded bg-white" placeholder="상품명" /></div>
+                                        <div className="flex gap-1.5 mt-1.5"><input type="text" value={irpSafePeriod} onChange={e=>{setIrpSafePeriod(e.target.value); setIrpSafeId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="w-1/3 p-1.5 text-xs border border-emerald-200 rounded bg-white text-center" placeholder="예치기간" /><div className="flex-1 relative"><input type="number" step="0.1" value={irpSafeRate} onChange={e=>{setIrpSafeRate(e.target.value); setIrpSafeId('custom'); setHasUncalculatedChanges(true);}} disabled={!useIRP} className="w-full p-1.5 text-xs border border-emerald-200 rounded pr-4 text-right bg-white font-bold text-emerald-700" /><span className="absolute right-2 top-1.5 text-xs text-slate-500">%</span></div></div>
+                                        <PID c="irp" id={irpSafeId} ip={irpSafePeriod} />
+                                    </div>
+                                </div><IrpS f={plan ? plan.finalIrpPrincipal : 0} cc="text-orange-600" /></div>
                                 
                                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-200 transition-colors"><div className="flex justify-between items-center mb-2"><div className="flex items-center gap-2"><label className="flex items-center gap-2 font-bold text-blue-900 text-sm"><input type="checkbox" checked={useISA} onChange={(e) => setUseISA(e.target.checked)} className="w-4 h-4 accent-blue-600"/>[입력 4] 중개형 ISA (우선순위 3) <HelpTooltip text="주식, ETF 등 다양한 자산을 운용하며 200만 원(서민형 400만 원)까지 비과세 및 초과분 분리과세를 적용받는 계좌입니다."/></label></div><div className="flex items-center gap-1"><span className="text-[10px] text-slate-500 flex items-center">인원: <HelpTooltip text="계좌를 운용할 명의자 수를 설정합니다."/></span><button onClick={() => setIsaPeople(Math.max(0, isaPeople - 1))} disabled={!useISA} className="px-1.5 py-0.5 rounded border bg-slate-100 text-xs">-</button><span className="text-xs font-bold w-3 text-center">{isaPeople}</span><button onClick={() => setIsaPeople(isaPeople + 1)} disabled={!useISA} className="px-1.5 py-0.5 rounded border bg-slate-100 text-xs">+</button></div></div><div className="flex justify-between items-center bg-blue-50 p-2 rounded border border-blue-100 mb-2"><span className="text-xs font-bold text-blue-700 flex items-center">1인당 매년 납입액 <HelpTooltip text="매년 ISA에 납입할 목표 금액입니다. 연간 한도는 2,000만 원, 누적 최대 1억 원까지 가능합니다."/></span><div className="flex items-center gap-1"><NumberInput value={isaLimitPerPerson} onChange={setIsaLimitPerPerson} disabled={!useISA} max={100000000} className="w-28 text-right text-sm border border-blue-200 rounded p-1 font-bold outline-none text-blue-800" /><span className="text-xs text-blue-700">원</span></div></div><div className="bg-blue-50/50 p-2.5 rounded-lg border border-blue-100 mb-2 space-y-2">
                                     <select value={isaId} onChange={(e) => handleProductSelectWrapper('isa', e.target.value, setIsaId, setIsaBank, setIsaName, setIsaRate, setIsaPeriod, setIsaIsGov)} disabled={!useISA} className="w-full p-1.5 text-xs border border-blue-200 rounded bg-white text-blue-900 font-medium">
@@ -889,8 +1116,10 @@
                                         <h3 className="font-extrabold text-sm">AI 시장 요약 및 맞춤형 투자 제안</h3>
                                     </div>
                                     <div className="p-6 bg-indigo-50/30">
-                                        <div className="text-slate-800 text-[14px] leading-relaxed whitespace-pre-wrap font-medium">
-                                            {(dbHistory && dbHistory.length > 0 && dbHistory[0].ai_analysis) ? dbHistory[0].ai_analysis : "AI가 최신 시장 데이터를 분석 중이거나 아직 수집되지 않았습니다. 상단의 실시간 데이터 연동 버튼을 눌러주세요."}
+                                        <div className="font-medium">
+                                            {(dbHistory && dbHistory.length > 0 && dbHistory[0].ai_analysis) 
+                                                ? formatAIAnalysis(dbHistory[0].ai_analysis) 
+                                                : <span className="text-[14px] text-slate-600 whitespace-pre-wrap">AI가 최신 시장 데이터를 분석 중이거나 아직 수집되지 않았습니다. 상단의 실시간 데이터 연동 버튼을 눌러주세요.</span>}
                                         </div>
                                     </div>
                                 </div>
@@ -934,20 +1163,53 @@
                                         <div className="bg-white p-6 rounded-3xl shadow-lg border border-slate-100 flex flex-col justify-center"><div className="text-[11px] font-bold text-slate-400 mb-2 uppercase">{plan ? plan.years : years}년간 총 세전 배당금</div><div className="text-xl md:text-2xl font-black text-slate-800">{plan ? formatKRW(plan.totalInterest) : '0원'}</div></div>
                                         <div className="bg-white p-6 rounded-3xl shadow-lg border border-slate-100 flex flex-col justify-center"><div className="text-[11px] font-bold text-slate-400 mb-2 uppercase">발생한 세금 총액</div><div className="text-xl md:text-2xl font-black text-rose-500">{plan ? `-${formatKRW(plan.totalTaxSum)}` : '0원'}</div></div>
                                         <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden flex flex-col justify-center"><div className="absolute -right-4 -bottom-4 opacity-10 transform rotate-12"><PiggyBank size={100} /></div><div className="relative z-10"><div className="text-[11px] text-indigo-200 font-bold mb-2 uppercase flex items-center gap-1.5"><Zap size={14} className="text-amber-300"/>{plan ? plan.years : years}년간 최종 순 배당</div><div className="flex flex-col items-start gap-1"><div className="text-xl md:text-2xl font-black">{plan ? formatKRW(plan.netInterest) : '0원'}</div></div></div></div>
-                                        <div className="bg-gradient-to-br from-teal-500 to-emerald-600 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden flex flex-col justify-center"><div className="absolute -right-4 -bottom-4 opacity-10 transform rotate-12"><Wallet size={100} /></div><div className="relative z-10"><div className="text-[12px] text-emerald-50 font-extrabold mb-1.5 uppercase flex items-center gap-1.5"><Wallet size={15} className="text-emerald-200"/>은퇴 후 월 실질 소득</div>
-<div className="text-[9.5px] text-emerald-100 font-bold mb-2 bg-emerald-800/40 px-1.5 py-0.5 rounded w-fit border border-emerald-500/30 tracking-tight leading-tight">(월 배당 + 국민연금 + IRP 수급기간 內)</div><div className="flex flex-col items-start gap-1"><div className="text-xl md:text-2xl font-black">{plan ? formatKRW((plan.netInterest / (plan.years * 12)) + plan.nationalPension + plan.firstIrpPayout) : '0원'}</div></div></div></div>
+                                        <div className="bg-gradient-to-br from-teal-500 to-emerald-600 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden flex flex-col justify-center">
+                                            <div className="absolute -right-4 -bottom-4 opacity-10 transform rotate-12"><Wallet size={100} /></div>
+                                            <div className="relative z-10">
+                                                <div className="text-[12px] text-emerald-50 font-extrabold mb-1.5 uppercase flex items-center gap-1.5"><Wallet size={15} className="text-emerald-200"/>은퇴 후 기본 월 소득</div>
+                                                <div className="text-[9.5px] text-emerald-100 font-bold mb-2 bg-emerald-800/40 px-1.5 py-0.5 rounded w-fit border border-emerald-500/30 tracking-tight leading-tight">(월 평균 순배당 + 국민연금)</div>
+                                                <div className="flex flex-col items-start gap-1">
+                                                    <div className="text-xl md:text-2xl font-black">{plan ? formatKRW((plan.netInterest / (plan.years * 12)) + plan.nationalPension) : '0원'}</div>
+                                                    {plan && plan.firstIrpPayout > 0 && <div className="text-[10px] text-emerald-200 font-bold mt-0.5 tracking-tight break-keep">※ IRP 연금 개시 시 월 {formatKRW(plan.firstIrpPayout)} 추가 수령</div>}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="bg-white p-6 rounded-3xl shadow-lg border border-slate-100 flex flex-col gap-3 relative overflow-hidden group"><div className="absolute left-0 top-0 w-1.5 h-full bg-blue-500"></div>{hasUncalculatedChanges && <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 pointer-events-none"></div>}<h4 className="text-slate-800 font-extrabold text-sm flex items-center gap-2"><ArrowRightCircle size={18} className="text-blue-500"/> [결과 1] 파킹통장 중심 자금 배분 흐름</h4><div className="flex items-center gap-3 text-xs md:text-sm text-slate-700 font-medium bg-slate-50/80 p-4 rounded-2xl border border-slate-100"><div className="flex flex-col items-center flex-1"><span className="text-[10px] text-blue-500 mb-1 font-bold">① 파킹 초기 자본금</span><span className="font-black text-slate-800 text-base">{formatManWon(assets)}</span></div><div className="flex flex-col items-center px-2"><span className="text-[10px] text-slate-400 mb-1 text-center">② {formatManWon(parkingTotal)} 제외<br/>100% 즉시 투자</span><div className="flex items-center gap-1"><span className="text-blue-300 font-black text-lg">👉</span><span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 shadow-sm">-{formatManWon(plan ? (Number(plan.assets) - Number(plan.initialParking)) : 0)}</span></div></div><div className="flex flex-col items-center flex-1"><span className="text-[10px] text-emerald-500 mb-1 font-bold">③ 1개월 차 파킹 잔액</span><span className="font-black text-emerald-600 text-base">{plan ? formatManWon(plan.initialParking) : '0원'}</span></div></div></div>
-                                <div className="bg-white p-6 rounded-3xl shadow-lg border border-slate-100 flex items-start gap-4 relative overflow-hidden group"><div className="absolute left-0 top-0 w-1.5 h-full bg-indigo-500"></div>{hasUncalculatedChanges && <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 pointer-events-none"></div>}<div className="bg-indigo-50 p-2.5 rounded-2xl text-indigo-600 mt-0.5 flex-shrink-0 shadow-inner"><Zap size={22} /></div><div className="w-full"><h4 className="text-slate-800 font-extrabold text-sm mb-2">[결과 2] 실시간 풀-가동 회전 알고리즘 (Sweep) 작동 중</h4><div className="flex flex-wrap gap-2">{plan?.allocationOrderInfo?.map((info, idx) => (<span key={idx} className="bg-slate-50 border border-slate-200 text-indigo-700 text-[10px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm"><span className="bg-indigo-100 text-indigo-800 rounded-md px-1.5 py-0.5">{idx + 1}위</span> {info}</span>))}</div></div></div>
+                                <div className="bg-white p-4 sm:p-6 rounded-3xl shadow-lg border border-slate-100 flex flex-col gap-3 relative overflow-hidden group">
+                                    <div className="absolute left-0 top-0 w-1.5 h-full bg-blue-500"></div>
+                                    {hasUncalculatedChanges && <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 pointer-events-none"></div>}
+                                    <h4 className="text-slate-800 font-extrabold text-sm flex items-center gap-2">
+                                        <ArrowRightCircle size={18} className="text-blue-500"/> [결과 1] 파킹통장 중심 자금 배분 흐름
+                                    </h4>
+                                    <div className="flex flex-row items-center justify-between gap-2 text-xs md:text-sm text-slate-700 font-medium bg-slate-50/80 p-3 sm:p-4 rounded-2xl border border-slate-100 overflow-x-auto custom-scrollbar">
+                                        <div className="flex flex-col items-center shrink-0 min-w-[90px]">
+                                            <span className="text-[11px] text-blue-500 mb-1 font-bold whitespace-nowrap">① 파킹 초기 자본금</span>
+                                            <span className="font-black text-slate-800 text-base sm:text-lg whitespace-nowrap">{formatManWon(assets)}</span>
+                                        </div>
+                                        <div className="flex flex-col items-center px-2 shrink-0">
+                                            <span className="text-[11px] text-slate-400 mb-1 text-center whitespace-nowrap">② {formatManWon(parkingTotal)} 제외<br/>100% 즉시 투자</span>
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-blue-300 font-black text-sm sm:text-lg">👉</span>
+                                                <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 shadow-sm whitespace-nowrap">-{formatManWon(plan ? (Number(plan.assets) - Number(plan.initialParking)) : 0)}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col items-center shrink-0 min-w-[90px]">
+                                            <span className="text-[11px] text-emerald-500 mb-1 font-bold whitespace-nowrap">③ 1개월 차 파킹 잔액</span>
+                                            <span className="font-black text-emerald-600 text-base sm:text-lg whitespace-nowrap">{plan ? formatManWon(plan.initialParking) : '0원'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="bg-white p-6 rounded-3xl shadow-lg border border-slate-100 flex items-start gap-4 relative overflow-hidden group"><div className="absolute left-0 top-0 w-1.5 h-full bg-indigo-500"></div>{hasUncalculatedChanges && <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 pointer-events-none"></div>}<div className="bg-indigo-50 p-2.5 rounded-2xl text-indigo-600 mt-0.5 flex-shrink-0 shadow-inner"><Zap size={22} /></div><div className="w-full"><h4 className="text-slate-800 font-extrabold text-sm mb-2 break-keep">[결과 2] 실시간 풀-가동 회전 알고리즘 (Sweep) 작동 중</h4><div className="flex flex-wrap gap-2">{plan?.allocationOrderInfo?.map((info, idx) => (<span key={idx} className="bg-slate-50 border border-slate-200 text-indigo-700 text-[10px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm break-keep"><span className="bg-indigo-100 text-indigo-800 rounded-md px-1.5 py-0.5 shrink-0">{idx + 1}위</span> {info}</span>))}</div></div></div>
 
-                                {plan?.hasHealthInsRisk && (<div className="bg-gradient-to-r from-orange-600 to-amber-600 border border-orange-800 p-6 rounded-3xl shadow-xl shadow-orange-500/30 animate-pulse relative overflow-hidden"><div className="bg-white p-2 rounded-full text-orange-600 shadow-sm flex-shrink-0 mt-1"><AlertTriangle size={24} /></div><div><h4 className="text-white font-black text-lg">⚠️ 경고: 건보료 피부양자 자격 박탈 (연 1천만원 초과)</h4><p className="text-orange-100 text-xs mt-1.5 font-medium leading-relaxed">참여자의 과세 대상 이자/배당 소득이 연 <b className="text-white bg-orange-800/50 px-1 rounded">1,000만 원</b>을 초과하여 지역가입자로 전환되었습니다.<br/><span className="text-white font-bold block mt-1.5 mb-1">[해당 참여자 및 발생 연도] {Array.from(new Set(plan.healthInsRiskDetails.map(d => `${d.member}(${d.year}년차)`))).join(', ')}</span>초과분에 대한 <b>예상 건보료(약 8%)가 파킹통장 잔고에서 자동 차감</b>되었습니다.</p></div></div>)}
-                                {plan?.hasCompTaxRisk && (<div className="bg-gradient-to-r from-red-600 to-rose-700 border border-red-800 p-6 rounded-3xl shadow-xl shadow-red-500/30 animate-pulse relative overflow-hidden mt-4"><div className="bg-white p-2 rounded-full text-red-600 shadow-sm flex-shrink-0 mt-1"><AlertTriangle size={24} /></div><div><h4 className="text-white font-black text-lg">🚨 강력 경고: 금융소득종합과세 진입 (연 2천만원 초과)</h4><p className="text-red-100 text-xs mt-1.5 font-medium leading-relaxed">참여자의 일반 과세 이자 수익이 연 <b className="text-white bg-red-800/50 px-1 rounded">2,000만 원</b>을 초과했습니다.<br/><span className="text-white font-bold block mt-1.5 mb-1">[해당 참여자 및 발생 연도] {Array.from(new Set(plan.compTaxRiskDetails.map(d => `${d.member}(${d.year}년차)`))).join(', ')}</span>초과분에 대한 <b>누진세(15% 추가)가 파킹통장 잔고에서 정밀 자동 차감</b>되었습니다.</p></div></div>)}
+                                {plan?.hasHealthInsRisk && (<div className="bg-gradient-to-r from-orange-600 to-amber-600 border border-orange-800 p-6 rounded-3xl shadow-xl shadow-orange-500/30 animate-pulse relative overflow-hidden"><div className="bg-white p-2 rounded-full text-orange-600 shadow-sm flex-shrink-0 mt-1 w-fit"><AlertTriangle size={24} /></div><div className="mt-2"><h4 className="text-white font-black text-lg break-keep">⚠️ 경고: 건보료 피부양자 자격 박탈 (연 1천만원 초과)</h4><p className="text-orange-100 text-xs mt-1.5 font-medium leading-relaxed break-keep">참여자의 과세 대상 이자/배당 소득이 연 <b className="text-white bg-orange-800/50 px-1 rounded inline-block mt-1 mb-1">1,000만 원</b>을 초과하여 지역가입자로 전환되었습니다.<br/><span className="text-white font-bold block mt-1.5 mb-1">[해당 참여자 및 발생 연도] {Array.from(new Set(plan.healthInsRiskDetails.map(d => `${d.member}(${d.year}년차)`))).join(', ')}</span>초과분에 대한 <b>예상 건보료(약 8%)가 파킹통장 잔고에서 자동 차감</b>되었습니다.</p></div></div>)}
+                                {plan?.hasCompTaxRisk && (<div className="bg-gradient-to-r from-red-600 to-rose-700 border border-red-800 p-6 rounded-3xl shadow-xl shadow-red-500/30 animate-pulse relative overflow-hidden mt-4"><div className="bg-white p-2 rounded-full text-red-600 shadow-sm flex-shrink-0 mt-1 w-fit"><AlertTriangle size={24} /></div><div className="mt-2"><h4 className="text-white font-black text-lg break-keep">🚨 강력 경고: 금융소득종합과세 진입 (연 2천만원 초과)</h4><p className="text-red-100 text-xs mt-1.5 font-medium leading-relaxed break-keep">참여자의 일반 과세 이자 수익이 연 <b className="text-white bg-red-800/50 px-1 rounded inline-block mt-1 mb-1">2,000만 원</b>을 초과했습니다.<br/><span className="text-white font-bold block mt-1.5 mb-1">[해당 참여자 및 발생 연도] {Array.from(new Set(plan.compTaxRiskDetails.map(d => `${d.member}(${d.year}년차)`))).join(', ')}</span>초과분에 대한 <b>누진세(초과분에 한해 15% 추가)가 파킹통장 잔고에서 정밀 자동 차감</b>되었습니다.</p></div></div>)}
 
                                 <div className="bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden relative transition-all duration-300">
                                     {hasUncalculatedChanges && <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 pointer-events-none"></div>}
-                                    <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/80 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => setShowYearlyDetails(!showYearlyDetails)}><h3 className="font-extrabold text-slate-800 flex items-center gap-2 text-sm"><List size={18} className="text-indigo-500"/> [결과 4] {plan ? plan.years : years}년 연차별 자산 분산 및 [정밀 세금 타격] 분석</h3><button className="text-slate-400 hover:text-indigo-600 transition-colors p-1 rounded-full hover:bg-white shadow-sm">{showYearlyDetails ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</button></div>
+                                    <div className="px-6 py-6 border-b border-slate-100 bg-slate-50/80 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => setShowYearlyDetails(!showYearlyDetails)}><h3 className="font-extrabold text-slate-800 flex items-center gap-2 text-sm"><List size={18} className="text-indigo-500"/> [결과 4] {plan ? plan.years : years}년 연차별 자산 분산 및 [정밀 세금 타격] 분석</h3><button className="text-slate-400 hover:text-indigo-600 transition-colors p-1 rounded-full hover:bg-white shadow-sm">{showYearlyDetails ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</button></div>
                                     {showYearlyDetails && plan && (
                                         <div className="overflow-x-auto max-h-[500px] overflow-y-auto custom-scrollbar relative"><table className="w-full text-right border-collapse min-w-[750px] whitespace-nowrap"><thead className="sticky top-0 z-20"><tr className="bg-white/90 backdrop-blur-sm text-slate-400 text-[10px] text-center border-b border-slate-200 uppercase"><th className="p-3 font-bold text-left pl-6 sticky left-0 z-30 bg-white/90">연차 / 계좌명</th><th className="p-3 font-bold">당해 원금(잔액)</th><th className="p-3 font-bold">당해 발생 이자</th><th className="p-3 font-bold">세금 및 패널티 (건보료 등)</th><th className="p-3 font-bold text-indigo-500 pr-6">당해 실질 수익</th></tr></thead>
                                             {plan.yearlyData.map((yData, idx) => (<tbody key={yData.year} className="text-xs"><tr className="bg-slate-50 border-t border-b border-slate-100"><td className="p-3 text-left font-extrabold text-slate-800" colSpan="5"><div className="sticky left-6 inline-flex items-center gap-2"><span className="bg-indigo-100 text-indigo-800 px-2.5 py-1 rounded-md text-[11px]">{yData.year}년차 결산</span></div></td></tr>
@@ -959,7 +1221,7 @@
 
                                 <div className="bg-white rounded-3xl shadow-lg border border-slate-100 overflow-hidden relative transition-all duration-300">
                                     {hasUncalculatedChanges && <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 pointer-events-none"></div>}
-                                    <div className="px-6 py-5 border-b border-slate-100 bg-teal-50/50 flex justify-between items-center cursor-pointer hover:bg-teal-100/50 transition-colors" onClick={() => setShowMonthlyDetails(!showMonthlyDetails)}><h3 className="font-extrabold text-teal-900 flex items-center gap-2 text-sm"><div className="bg-teal-100 p-1 rounded text-teal-700 inline-block"><Wallet size={16}/></div> [결과 5] 월별 현금 흐름 및 파킹통장 잔액 추이</h3><button className="text-teal-600 hover:text-teal-900 transition-colors p-1 rounded-full hover:bg-white shadow-sm">{showMonthlyDetails ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</button></div>
+                                    <div className="px-6 py-6 border-b border-slate-100 bg-teal-50/50 flex justify-between items-center cursor-pointer hover:bg-teal-100/50 transition-colors" onClick={() => setShowMonthlyDetails(!showMonthlyDetails)}><h3 className="font-extrabold text-teal-900 flex items-center gap-2 text-sm"><div className="bg-teal-100 p-1 rounded text-teal-700 inline-block"><Wallet size={16}/></div> [결과 5] 월별 현금 흐름 및 파킹통장 잔액 추이</h3><button className="text-teal-600 hover:text-teal-900 transition-colors p-1 rounded-full hover:bg-white shadow-sm">{showMonthlyDetails ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</button></div>
                                     {plan?.bankruptMonth && (<div className="bg-red-50 p-4 border-b border-red-100 text-red-700 text-[11px] font-bold flex items-center gap-2"><AlertTriangle size={18}/> {plan.bankruptMonth}개월 차에 파킹통장이 고갈되었습니다. 종소세/건보료 타격 또는 생활비 초과가 원인입니다.</div>)}
                                     {showMonthlyDetails && plan && (
                                         <div className="overflow-x-auto max-h-[500px] overflow-y-auto custom-scrollbar relative"><table className="w-full text-right border-collapse min-w-[1100px] whitespace-nowrap"><thead className="sticky top-0 z-20"><tr className="bg-white/90 backdrop-blur-sm text-slate-400 text-[10px] text-center border-b border-slate-200 uppercase tracking-widest shadow-sm"><th className="p-3 font-bold sticky left-0 z-30 bg-white/90 shadow-[inset_-1px_0_0_0_#f1f5f9]">경과 월</th><th>월초 잔액</th><th className="text-teal-600">당월 이자</th><th className="text-emerald-600">배당/이자</th><th className="text-emerald-700 bg-emerald-50/50">원금회수</th><th className="text-blue-600 bg-blue-50/50">현금유입(연금등)</th><th className="text-purple-600 bg-purple-50/50">정기적립</th><th className="p-3 font-bold text-orange-600 bg-orange-50/50">투자/회수</th><th className="p-3 font-bold text-rose-500 bg-rose-50/50">생활비 출금</th><th className="p-3 font-extrabold text-teal-900">파킹 최종 잔고</th><th className="p-3 font-bold text-slate-400 pr-6">하한액 부족분</th></tr></thead>
@@ -1076,7 +1338,7 @@
                         <p className="text-xs text-slate-500 mb-4">매월 파킹통장에 배당금과 생활비가 어떻게 순환되며 원금이 안전하게 지켜지는지 보여주는 시뮬레이션 표입니다.</p>
                         <table className="w-full text-[10px] border-collapse print-table">
                             <thead><tr><th className="text-center w-16">경과 월</th><th>월초 잔액</th><th className="text-emerald-700">+ 월 배당/이자</th><th className="text-rose-600">- 월 생활비 지출</th><th className="bg-slate-50">최종 파킹 잔액</th></tr></thead>
-                            <tbody>{plan?.monthlyData?.map((mData) => (<tr key={mData.month}><td className="text-center font-bold text-slate-600">{mData.month}개월</td><td>{formatKRW(mData.startingBalance)}</td><td className="text-emerald-600 font-bold">+{formatKRW(mData.dividends + mData.parkingInterest)}</td><td className="text-rose-500">-{formatKRW(mData.withdrawal)}</td><td className="font-black bg-slate-50">{formatKRW(mData.endingBalance)} <span className="text-[9px] text-slate-500 ml-1">+증권금액</span></td></tr>))}</tbody>
+                            <tbody>{plan?.monthlyData?.map((mData) => (<tr key={mData.month}><td className="text-center font-bold text-slate-600">{mData.month}개월</td><td>{formatKRW(mData.startingBalance)}</td><td className="text-emerald-600 font-bold">+{formatKRW(mData.dividends + mData.parkingInterest)}</td><td className="text-rose-500">-{formatKRW(mData.withdrawal)}</td><td className="font-black bg-slate-50">{formatKRW(Math.max(0, mData.endingBalance))} <span className="text-[9px] text-slate-500 ml-1">+증권금액</span></td></tr>))}</tbody>
                         </table><div className="page-footer">- 4 -</div>
                     </div>
                 </div>
